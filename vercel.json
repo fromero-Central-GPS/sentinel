@@ -1,0 +1,17 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm ci",
+  "devCommand": "npm run dev",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "staging": true,
+      "dev": true
+    }
+  },
+  "github": {
+    "silent": false,
+    "autoAlias": true
+  }
+}
