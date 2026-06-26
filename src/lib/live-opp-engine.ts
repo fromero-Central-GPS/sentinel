@@ -12,6 +12,33 @@
 
 import type { SuccessThresholds } from "./won-track-engine";
 
+// ─── Default Thresholds ─────────────────────────────────────────────────────
+
+/** Umbrales por defecto cuando no hay datos de Won Track disponibles */
+export function getDefaultThresholds(): SuccessThresholds {
+  return {
+    avgTimeToClose: 14,
+    medianTimeToClose: 10,
+    fastCloseThreshold: 5,
+    avgResponseMinutes: 60,
+    medianResponseMinutes: 45,
+    dangerResponseThreshold: 120,
+    idealResponseThreshold: 30,
+    avgMessagesPerDeal: 25,
+    avgInboundRatio: 0.45,
+    lowEngagementThreshold: 0.25,
+    topChannel: "whatsapp",
+    channelWinRates: { whatsapp: 100 },
+    topPlan: "pro",
+    planDistribution: { pro: 100 },
+    avgContractValue: 500000,
+    medianContractValue: 350000,
+    valueByFleetSize: {},
+    sampleSize: 0,
+    analyzedAt: new Date().toISOString(),
+  };
+}
+
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
 export interface GHLMessage {
