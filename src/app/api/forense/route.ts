@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { decrypt } from '@/lib/encryption';
-import { enforceMotorAccess, incrementUsage } from '@/lib/plan-enforcement';
+import { enforceMotorAccess, enforceConversationLimit, incrementUsage } from '@/lib/plan-enforcement';
 import {
   analyzeConversation,
   generateBatchSummary,
@@ -111,6 +111,11 @@ async function fetchGHLForense(
 
     // 2. For each opp, get conversation messages (parallel, capped at 10)
     const oppsToProcess = rawOpps.slice(0, 10);
+
+    // Check conversation limit before processing
+    const limitCheck = await enforceConversationLimit(oppsToProcess.length);
+    if (limitCheck.blocked) throw limitCheck.response;
+
     const conversations: GHLConversationInput[] = [];
     const mappedOpps: Parameters<typeof runAnalysis>[1] = [];
 
@@ -216,13 +221,20 @@ export async function GET(request: Request) {
           },
         });
       }
-    } catch {
-      // fall through to mock
+    } catch (e) {
+      // If it's a limit-enforcement response, return it as-is
+      if (e instanceof Response) return e;
+      // Otherwise fall through to mock
     }
   }
 
   // Mock mode (default fallback)
   const conversations = buildMockConversations();
+
+  // Check conversation limit before processing
+  const limitCheck = await enforceConversationLimit(conversations.length);
+  if (limitCheck.blocked) return limitCheck.response!;
+
   const opps = conversations.map((c, i) => ({
     id: `OPP-MOCK-${i + 1}`,
     name: c.contactName,

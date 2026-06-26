@@ -4,7 +4,7 @@ import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { decrypt } from '@/lib/encryption';
-import { enforceMotorAccess, incrementUsage } from '@/lib/plan-enforcement';
+import { enforceMotorAccess, enforceConversationLimit, incrementUsage } from '@/lib/plan-enforcement';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const GHL_VERSION = '2021-07-28';
@@ -38,6 +38,11 @@ export async function GET() {
 
   const data = await res.json();
   const rawOpps: GHLRawOpportunity[] = data.opportunities ?? data.data ?? [];
+
+  // Check conversation limit before processing
+  const limitCheck = await enforceConversationLimit(rawOpps.length);
+  if (limitCheck.blocked) return limitCheck.response!;
+
   const now = Date.now();
 
   const atRisk = rawOpps

@@ -4,7 +4,7 @@ import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { decrypt } from '@/lib/encryption';
-import { enforceMotorAccess, incrementUsage } from '@/lib/plan-enforcement';
+import { enforceMotorAccess, enforceConversationLimit, incrementUsage } from '@/lib/plan-enforcement';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const GHL_VERSION = '2021-07-28';
@@ -43,6 +43,10 @@ export async function GET() {
   const [wonData, totalData] = await Promise.all([wonRes.json(), totalRes.json()]);
   const wonOpps: GHLOpp[] = wonData.opportunities ?? wonData.data ?? [];
   const totalOpps: GHLOpp[] = totalData.opportunities ?? totalData.data ?? [];
+
+  // Check conversation limit before processing
+  const limitCheck = await enforceConversationLimit(totalOpps.length);
+  if (limitCheck.blocked) return limitCheck.response!;
 
   const won = wonOpps.length;
   const total = totalOpps.length;
