@@ -8,6 +8,7 @@
  */
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
+import { eq } from 'drizzle-orm';
 import { plans } from '../src/db/schema';
 
 const SEED_PLANS = [
@@ -87,16 +88,10 @@ async function seed() {
     const existing = await db
       .select()
       .from(plans)
-      .where(
-        // drizzle doesn't support where with raw sql easily, use eq on slug
-        // using a workaround with select all and filter
-      )
+      .where(eq(plans.slug, plan.slug))
       .execute();
 
-    // Check if plan with this slug already exists
-    const slugExists = existing.some((p) => p.slug === plan.slug);
-
-    if (slugExists) {
+    if (existing.length > 0) {
       console.log(`  ⏭️  Plan "${plan.name}" already exists, skipping.`);
     } else {
       await db.insert(plans).values(plan).execute();

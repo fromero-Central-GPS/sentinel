@@ -27,10 +27,10 @@ export default function Home() {
         <div className="flex gap-4">
           <Show when="signed-in">
             <Link
-              href="/dashboard"
+              href="/onboarding"
               className="rounded-full bg-foreground px-6 py-3 text-sm font-medium text-background hover:opacity-90"
             >
-              Go to Dashboard
+              Ir a Sentinel
             </Link>
           </Show>
           <Show when="signed-out">
