@@ -6,10 +6,10 @@ const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 
 function getKey(): Buffer {
-  const keyHex = process.env.ENCRYPTION_KEY;
-  if (!keyHex) throw new Error('ENCRYPTION_KEY env var is required');
-  const key = Buffer.from(keyHex, 'hex');
-  if (key.length !== KEY_LENGTH) throw new Error('ENCRYPTION_KEY must be 32 bytes (64 hex chars)');
+  const keyB64 = process.env.ENCRYPTION_KEY;
+  if (!keyB64) throw new Error('ENCRYPTION_KEY env var is required');
+  const key = Buffer.from(keyB64, 'base64');
+  if (key.length !== KEY_LENGTH) throw new Error('ENCRYPTION_KEY must be 32 bytes (44 base64 chars)');
   return key;
 }
 

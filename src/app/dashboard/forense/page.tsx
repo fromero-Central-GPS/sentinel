@@ -11,6 +11,7 @@ type ForenseResponse = {
     note?: string;
     source?: string;
   };
+  error?: string;
 };
 
 const PRIORITY_CONFIG: Record<RecoverabilityPriority, { label: string; className: string }> = {
@@ -153,9 +154,11 @@ export default function ForensePage() {
   const [data, setData] = useState<ForenseResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'live'|'mock'>('live');
 
   useEffect(() => {
-    fetch('/api/forense')
+    setLoading(true);
+    fetch(`/api/engines/forense?mode=${mode}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) throw new Error(d.error);
@@ -163,9 +166,9 @@ export default function ForensePage() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [mode]);
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="p-8 flex items-center justify-center min-h-64">
         <div className="text-sm text-zinc-500 animate-pulse">Analizando conversaciones…</div>
@@ -173,47 +176,72 @@ export default function ForensePage() {
     );
   }
 
-  if (error || !data) {
+  if (error && !data) {
+    const isNoCredentials = error.includes('not configured');
     return (
-      <div className="p-8">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          Error al cargar análisis: {error ?? 'Respuesta vacía'}
+      <div className="p-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Forense</h1>
+          <button 
+             onClick={() => setMode(mode === 'live' ? 'mock' : 'live')}
+             className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 hover:bg-zinc-50"
+          >
+             Modo: {mode}
+          </button>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center space-y-3">
+          <p className="font-semibold text-amber-800">
+            {isNoCredentials ? 'Credenciales GHL no configuradas' : 'Error al cargar análisis'}
+          </p>
+          <p className="text-sm text-amber-700">{isNoCredentials ? 'Configura tu API Token y Location ID de GHL en Settings.' : error}</p>
+          <a href="/settings" className="inline-block mt-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800">
+            Ir a Settings →
+          </a>
         </div>
       </div>
     );
   }
+
+  if (!data) return null;
 
   const { batchResult, _meta } = data;
   const { summary } = batchResult;
 
   return (
     <div className="p-6 md:p-8 space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Forense</h1>
           <p className="text-sm text-zinc-500 mt-1">
             Análisis de conversaciones perdidas — clasificación por causa raíz y recuperabilidad
           </p>
         </div>
-        <span
-          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
-            _meta.mode === 'live'
-              ? 'bg-green-100 text-green-700'
-              : 'bg-amber-100 text-amber-700'
-          }`}
-        >
-          {_meta.mode === 'live' ? '● Datos reales' : '● Demo'}
-        </span>
+        <div className="flex items-center gap-3">
+            <span className="text-sm text-zinc-500">Datos:</span>
+            <div className="flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+              <button
+                onClick={() => setMode('live')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === 'live' ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200' : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                GHL API
+              </button>
+              <button
+                onClick={() => setMode('mock')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === 'mock' ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200' : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                Demo
+              </button>
+            </div>
+        </div>
       </div>
 
-      {/* Mock notice */}
-      {_meta.mode === 'mock' && _meta.note && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {_meta.note}{' '}
-          <a href="/settings" className="font-semibold underline hover:no-underline">
-            Ir a Settings →
-          </a>
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          ⚠️ {error}
         </div>
       )}
 
@@ -231,66 +259,47 @@ export default function ForensePage() {
           sub="Suma de oportunidades perdidas"
         />
         <SummaryCard
-          label="Valor recuperable"
+          label="Recuperabilidad URG/ALTA"
           value={formatCLP(summary.recoverableValue)}
-          accent="text-green-600"
-          sub={`${summary.highPriorityCount} opps. de alta prioridad`}
+          accent="text-amber-600"
+          sub={`${summary.highPriorityCount} oportunidades`}
         />
         <SummaryCard
-          label="Urgentes"
-          value={String(summary.urgentCount)}
-          accent="text-red-600"
-          sub="Requieren acción inmediata"
+          label="Principal causa pérdida"
+          value={summary.topLossReasons[0] ? (REASON_LABELS[summary.topLossReasons[0].reason] ?? summary.topLossReasons[0].reason) : '—'}
+          sub={summary.topLossReasons[0] ? `${summary.topLossReasons[0].count} casos` : 'Sin datos'}
         />
       </div>
 
-      {/* Top loss reasons */}
-      {summary.topLossReasons.length > 0 && (
-        <div className="rounded-xl border border-zinc-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-zinc-700 mb-3">Razones de pérdida</h2>
-          <div className="flex flex-wrap gap-2">
-            {summary.topLossReasons.slice(0, 6).map((r) => (
-              <div
-                key={r.reason}
-                className="flex items-center gap-2 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2"
-              >
-                <span className="text-sm font-medium text-zinc-700">
-                  {REASON_LABELS[r.reason]}
-                </span>
-                <span className="text-xs text-zinc-500">{r.count} caso{r.count !== 1 ? 's' : ''}</span>
-                <span className="text-xs font-mono text-zinc-600">{formatCLP(r.value)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Conversations table */}
-      <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
-        <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-700">
-            Conversaciones ({batchResult.conversations.length})
-          </h2>
-          <p className="text-xs text-zinc-400">Ordenado por recuperabilidad ↓</p>
-        </div>
+      {/* Main Table */}
+      <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50">
-                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Contacto</th>
-                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Prioridad</th>
-                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Score</th>
-                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Valor</th>
-                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Causa raíz</th>
-                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Inactividad</th>
-                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Canal</th>
-                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide"></th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Oportunidad</th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Recuperabilidad</th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Score</th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Valor</th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Causa Raíz</th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Días sin Contacto</th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Canal</th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {batchResult.conversations.map((conv) => (
-                <ConversationRow key={conv.conversationId} item={conv} />
-              ))}
+              {batchResult.conversations
+                .sort((a, b) => b.recoverability.totalScore - a.recoverability.totalScore)
+                .map((item) => (
+                  <ConversationRow key={item.conversationId} item={item} />
+                ))}
+              {batchResult.conversations.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-zinc-500">
+                    No se encontraron oportunidades perdidas para analizar.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

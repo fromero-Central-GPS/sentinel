@@ -5,7 +5,10 @@ import Link from 'next/link';
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-black p-8">
-      <header className="absolute top-0 right-0 p-4">
+      <header className="absolute top-0 right-0 flex items-center gap-4 p-4">
+        <Link href="/pricing" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+          Planes
+        </Link>
         <Show when="signed-in">
           <UserButton />
         </Show>

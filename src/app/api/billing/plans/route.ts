@@ -8,7 +8,7 @@ import { plans } from '@/db/schema';
  */
 export async function GET() {
   try {
-    const allPlans = await db.select().from(plans).execute();
+    const allPlans = await db.select().from(plans);
     return NextResponse.json({ plans: allPlans });
   } catch (error: any) {
     console.error('[Billing API] Failed to fetch plans:', error);

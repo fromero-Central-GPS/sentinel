@@ -11,8 +11,9 @@
 # Original sentinel*.vercel.app names were taken — sentinel-fleet* was verified
 # available as of 2026-06-26.
 #
-# Alternative future option: sentinel.centralgps.cl (requires Cloudflare DNS config)
-# centralgps.cl uses Cloudflare nameservers (gwen.ns.cloudflare.com, dale.ns.cloudflare.com)
+# Production custom domain: sentinel.supersonics.cl (requires Cloudflare DNS config)
+# supersonics.cl uses Cloudflare nameservers (serena.ns.cloudflare.com, yoxall.ns.cloudflare.com)
+# Run scripts/setup-cloudflare-domain.sh to create the CNAME record
 
 set -euo pipefail
 
@@ -67,10 +68,10 @@ echo "      - $STAGING_DOMAIN (staging branch alias)"
 echo "      - $DEV_DOMAIN (dev branch alias)"
 echo "   4. For staging/dev: set up Git branch → domain mapping in project settings"
 echo ""
-echo "🔮 Future option — corporate domain:"
-echo "   sentinel.centralgps.cl is available (centralgps.cl uses Cloudflare DNS)"
-echo "   To set it up automatically:"
+echo "🔮 Production custom domain:"
+echo "   sentinel.supersonics.cl (Cloudflare DNS → Vercel)"
+echo "   To set it up:"
 echo "     CLOUDFLARE_API_TOKEN='your-token' bash scripts/setup-cloudflare-domain.sh"
 echo ""
 echo "   Or manually: add the domain in Vercel, then add a CNAME record in Cloudflare:"
-echo "     sentinel.centralgps.cl → cname.vercel-dns.com"
+echo "     sentinel.supersonics.cl → cname.vercel-dns.com"

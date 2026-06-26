@@ -1,5 +1,6 @@
 import { UserButton } from '@clerk/nextjs';
 import Link from 'next/link';
+import PlanBadge from '@/components/PlanBadge';
 
 function DashboardIcon({ className }: { className?: string }) {
   return (
@@ -87,6 +88,10 @@ export default function DashboardLayout({
             </Link>
           ))}
         </nav>
+
+        <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+          <PlanBadge />
+        </div>
 
         <div className="mt-auto border-t border-zinc-200 pt-4 dark:border-zinc-800">
           <UserButton />

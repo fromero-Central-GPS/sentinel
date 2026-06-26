@@ -1,53 +1,39 @@
 #!/usr/bin/env bash
 # Setup Cloudflare DNS records for Sentinel: Vercel domain + Clerk auth DNS
-# Requirements: CLOUDFLARE_API_TOKEN env var
+# Requirements: CLOUDFLARE_API_TOKEN env var with Zone:DNS:Edit on supersonics.cl
 # Usage:
 #   export CLOUDFLARE_API_TOKEN='your-token-here'
 #   bash scripts/setup-cloudflare-domain.sh
 #
-# centralgps.cl uses Cloudflare nameservers:
-#   gwen.ns.cloudflare.com
-#   dale.ns.cloudflare.com
+# supersonics.cl uses Cloudflare nameservers:
+#   serena.ns.cloudflare.com
+#   yoxall.ns.cloudflare.com
 
 set -euo pipefail
 
 # ─── Config ────────────────────────────────────────────────────────────
 
-ZONE_NAME="centralgps.cl"
+ZONE_NAME="supersonics.cl"
 
 # Each record: "TYPE|NAME|CONTENT|PROXIED|TTL"
-# PROXIED: true for CDN/proxied, false for CNAME redirects (Vercel, Clerk)
+# PROXIED: false = DNS-only (required for Vercel and Clerk CNAMEs)
 # TTL: 1 = Auto
 
 DNS_RECORDS=(
   # ── Vercel deploy domain ─────────────────────────────────────────────
   "CNAME|sentinel|${SENTINEL_VERCEL_TARGET:-cname.vercel-dns.com}|false|1"
 
-  # ── Clerk Authentication DNS ─────────────────────────────────────────
-  #
-  # Clerk necesita un CNAME para el dominio de sign-in personalizado.
-  # PASOS para obtener el target:
-  #   1. Ir a Clerk Dashboard → Domains
-  #      https://dashboard.clerk.com → tu app → Domains
-  #   2. Add Domain → ingresar "accounts.centralgps.cl"
-  #   3. Clerk te mostrará el CNAME target exacto (algo como:
-  #      "abcdef.clerk.services" o "clerk.xxx.com")
-  #   4. Copiá ese target acá abajo:
-  #
-  # Descomentá y reemplazá <clerk-cname-target> con el valor real:
-  # "CNAME|accounts|<clerk-cname-target>|false|1"
+  # ── Clerk Authentication ─────────────────────────────────────────────
+  # Custom sign-in domain
+  "CNAME|accounts|accounts.clerk.services|false|1"
 
-  # ── Clerk Email Service (opcional) ───────────────────────────────────
-  #
-  # Si querés que los emails de Clerk (magic links, invites, etc.)
-  # vengan de un dominio propio (@centralgps.cl), Clerk te da un
-  # CNAME de email tracking. Pasos:
-  #   1. Clerk Dashboard → Email → Custom domain
-  #   2. Clerk te da uno o más TXT/CNAME records
-  #   3. Agregalos acá:
-  #
-  # "TXT|mail|v=spf1 include:spf.clerk.services ~all|false|1"
-  # "CNAME|email|mail.clerk.services|false|1"
+  # Clerk frontend API
+  "CNAME|clerk|frontend-api.clerk.services|false|1"
+
+  # ── Clerk Email (DKIM + mail) ────────────────────────────────────────
+  "CNAME|clk._domainkey|dkim1.azn90t7k8jvh.clerk.services|false|1"
+  "CNAME|clk2._domainkey|dkim2.azn90t7k8jvh.clerk.services|false|1"
+  "CNAME|clkmail|mail.azn90t7k8jvh.clerk.services|false|1"
 )
 
 # ─── Helper functions ──────────────────────────────────────────────────
@@ -157,35 +143,19 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✅ $ACTIVE_RECORDS DNS records configured."
 echo ""
-
-# Check which Clerk records are still commented out
-if grep -q '<clerk-cname-target>' "$0"; then
-  echo "⚠️  Clerk DNS records aún NO están configurados."
-  echo ""
-  echo "   Para activar el dominio de autenticación de Clerk:"
-  echo "   1. Ir a Clerk Dashboard → Domains"
-  echo "      https://dashboard.clerk.com"
-  echo "   2. Agregar dominio: accounts.centralgps.cl"
-  echo "   3. Clerk te dará un CNAME target exacto"
-  echo "   4. Editar este script y reemplazar <clerk-cname-target>"
-  echo "      con el valor que Clerk te mostró"
-  echo "   5. Volver a ejecutar:"
-  echo "      export CLOUDFLARE_API_TOKEN='tu-token'"
-  echo "      bash scripts/setup-cloudflare-domain.sh"
-  echo ""
-fi
-
 echo "📋 Próximos pasos:"
 echo ""
 echo "  Vercel:"
 echo "    Dashboard → sentinel → Settings → Domains → Add"
-echo "    → sentinel.centralgps.cl"
+echo "    → sentinel.supersonics.cl"
 echo ""
-echo "  Clerk (cuando los DNS estén listos):"
-echo "    Dashboard → Domains → verificar que el dominio esté activo"
+echo "  Clerk:"
+echo "    Dashboard → Domains → seleccionar supersonics.cl → Verify"
+echo "    → Esperar que los 5 registros pasen a 'verified'"
 echo "    → Settings → Custom Domain → configurar sign-in URL"
 echo "    → Actualizar NEXT_PUBLIC_CLERK_SIGN_IN_URL en Vercel/envs"
 echo ""
 echo "  DNS propagation: <5 min con Cloudflare"
-echo "    Verificar: dig CNAME sentinel.centralgps.cl"
+echo "    Verificar: dig CNAME accounts.supersonics.cl"
+echo "    Verificar: dig CNAME sentinel.supersonics.cl"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

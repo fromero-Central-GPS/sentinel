@@ -35,6 +35,12 @@ export default function SettingsPage() {
   const [verifyStatus, setVerifyStatus] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Subscription / usage state
+  const [subscription, setSubscription] = useState<any>(null);
+  const [usage, setUsage] = useState<any>(null);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [changingPlan, setChangingPlan] = useState('');
+
   const webhookInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -54,6 +60,22 @@ export default function SettingsPage() {
         setMetaPhoneNumberId(data.metaPhoneNumberId ?? '');
         setMetaAccessToken(data.metaAccessToken ?? '');
       });
+
+    // Load subscription & usage & plans
+    fetch('/api/billing/subscription')
+      .then((r) => r.json())
+      .then(setSubscription)
+      .catch(() => {});
+
+    fetch('/api/billing/usage')
+      .then((r) => r.json())
+      .then(setUsage)
+      .catch(() => {});
+
+    fetch('/api/billing/plans')
+      .then((r) => r.json())
+      .then((d) => setPlans(d.plans ?? []))
+      .catch(() => {});
   }, []);
 
   async function saveGhl() {
@@ -247,6 +269,120 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      {/* Plan & Subscription Section */}
+      {subscription?.plan && (
+        <section className="rounded-lg border p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Plan y uso</h2>
+
+          <div className="rounded-xl bg-zinc-50 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-zinc-700">Plan actual</p>
+                <p className="text-2xl font-bold mt-1">{subscription.plan.name}</p>
+              </div>
+              <a
+                href="/pricing"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Cambiar plan
+              </a>
+            </div>
+            {subscription.plan.priceMonthlyClp && subscription.plan.priceMonthlyClp !== '0' && (
+              <p className="mt-2 text-sm text-zinc-500">
+                ${parseInt(subscription.plan.priceMonthlyClp, 10).toLocaleString('es-CL')}/mes
+              </p>
+            )}
+          </div>
+
+          {/* Usage bar */}
+          {usage && (
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-zinc-600">Conversaciones este mes</span>
+                  <span className="font-mono text-zinc-700">
+                    {usage.usage.conversationsAnalyzed} / {usage.limits.maxConversationsPerMonth}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      usage.limits.usagePercent >= 90 ? 'bg-red-500' :
+                      usage.limits.usagePercent >= 70 ? 'bg-amber-400' : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${Math.min(100, usage.limits.usagePercent)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 text-center text-sm">
+                <div className="rounded-lg bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Forense</p>
+                  <p className="font-semibold mt-0.5">{usage.usage.forenseRuns}</p>
+                </div>
+                <div className="rounded-lg bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Live Opp</p>
+                  <p className="font-semibold mt-0.5">{usage.usage.liveOppRuns}</p>
+                </div>
+                <div className="rounded-lg bg-zinc-50 p-3">
+                  <p className="text-xs text-zinc-500">Won Track</p>
+                  <p className="font-semibold mt-0.5">{usage.usage.wonTrackRuns}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Subscription status */}
+          {subscription.subscription && (
+            <div className="text-xs text-zinc-400 space-y-0.5">
+              <p>Estado: <span className="font-medium capitalize">{subscription.subscription.status}</span></p>
+              {subscription.subscription.currentPeriodEnd && (
+                <p>
+                  Próximo período: {new Date(subscription.subscription.currentPeriodEnd).toLocaleDateString('es-CL')}
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Plan upgrade footer for Free users */}
+      {plans.length > 0 && subscription?.plan?.slug === 'free' && (
+        <section className="rounded-lg border border-blue-200 bg-blue-50 p-6 space-y-3">
+          <h2 className="text-lg font-semibold text-blue-900">¿Necesitas más?</h2>
+          <p className="text-sm text-blue-700">
+            El plan Pro incluye 5,000 conversaciones/mes y todos los motores de análisis.
+          </p>
+          <div className="flex gap-3">
+            {plans
+              .filter((p) => p.slug !== 'free')
+              .map((plan) => (
+                <button
+                  key={plan.id}
+                  onClick={async () => {
+                    setChangingPlan(plan.slug);
+                    try {
+                      const res = await fetch('/api/billing/subscription', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ planSlug: plan.slug }),
+                      });
+                      if (!res.ok) { alert('Error al actualizar'); setChangingPlan(''); return; }
+                      const upd = await fetch('/api/billing/subscription').then((r) => r.json());
+                      setSubscription(upd);
+                      setChangingPlan('');
+                    } catch { alert('Error de conexión'); setChangingPlan(''); }
+                  }}
+                  disabled={changingPlan === plan.slug}
+                  className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {changingPlan === plan.slug ? 'Actualizando…' : `Upgrade a ${plan.name}`}
+                </button>
+              ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

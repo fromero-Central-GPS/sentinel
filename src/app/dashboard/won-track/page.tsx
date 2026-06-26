@@ -11,6 +11,9 @@ type WonTrackData = {
   avgCycleDays: number;
   alerts: { type: string; message: string }[];
   error?: string;
+  successThresholds?: any;
+  businessFeatures?: any;
+  communicationPatterns?: any;
 };
 
 function formatCLP(value: number): string {
@@ -23,9 +26,11 @@ export default function WonTrackPage() {
   const [data, setData] = useState<WonTrackData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'live'|'mock'>('live');
 
   useEffect(() => {
-    fetch('/api/engines/won-track')
+    setLoading(true);
+    fetch(`/api/engines/won-track?mode=${mode}`)
       .then((r) => r.json())
       .then((d: WonTrackData) => {
         if (d.error) throw new Error(d.error);
@@ -33,9 +38,9 @@ export default function WonTrackPage() {
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [mode]);
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="p-8 flex items-center justify-center min-h-64">
         <div className="text-sm text-zinc-500 animate-pulse">Cargando métricas de conversión…</div>
@@ -43,11 +48,19 @@ export default function WonTrackPage() {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     const isNoCredentials = error.includes('not configured');
     return (
       <div className="p-8 space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Won Track</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Won Track</h1>
+          <button 
+             onClick={() => setMode(mode === 'live' ? 'mock' : 'live')}
+             className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 hover:bg-zinc-50"
+          >
+             Modo: {mode}
+          </button>
+        </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center space-y-3">
           <p className="font-semibold text-amber-800">
             {isNoCredentials ? 'Credenciales GHL no configuradas' : 'Error al cargar datos'}
@@ -68,15 +81,44 @@ export default function WonTrackPage() {
 
   return (
     <div className="p-6 md:p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Won Track</h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Métricas de conversión — últimos {data.period === '30d' ? '30 días' : data.period}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Won Track</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Análisis de oportunidades ganadas y patrones de éxito
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+            <span className="text-sm text-zinc-500">Datos:</span>
+            <div className="flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+              <button
+                onClick={() => setMode('live')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === 'live' ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200' : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                GHL API
+              </button>
+              <button
+                onClick={() => setMode('mock')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === 'mock' ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200' : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                Demo
+              </button>
+            </div>
+        </div>
       </div>
 
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          ⚠️ {error}
+        </div>
+      )}
+
       {/* Alerts */}
-      {data.alerts.length > 0 && (
+      {data.alerts && data.alerts.length > 0 && (
         <div className="space-y-2">
           {data.alerts.map((alert, i) => (
             <div key={i} className={`rounded-lg border px-4 py-3 text-sm ${
@@ -93,7 +135,7 @@ export default function WonTrackPage() {
         <div className="rounded-xl border border-zinc-200 bg-white p-5">
           <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Deals ganados</p>
           <p className="mt-2 text-3xl font-bold text-green-600">{data.won}</p>
-          <p className="mt-1 text-xs text-zinc-500">de {data.total} totales</p>
+          <p className="mt-1 text-xs text-zinc-500">de {data.total} totales (30d)</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-5">
           <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Tasa de conversión</p>
@@ -114,42 +156,77 @@ export default function WonTrackPage() {
         </div>
       </div>
 
-      {/* Conversion visualization */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-6">
-        <h2 className="text-sm font-semibold text-zinc-700 mb-4">Funnel de conversión</h2>
-        <div className="space-y-3">
-          <div>
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-zinc-600">Total oportunidades</span>
-              <span className="font-mono font-medium">{data.total}</span>
-            </div>
-            <div className="h-3 rounded-full bg-zinc-100 overflow-hidden">
-              <div className="h-full w-full rounded-full bg-zinc-300" />
-            </div>
-          </div>
-          <div>
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-zinc-600">Ganadas</span>
-              <span className="font-mono font-medium text-green-700">{data.won} ({conversionPct}%)</span>
-            </div>
-            <div className="h-3 rounded-full bg-zinc-100 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${isAboveThreshold ? 'bg-green-500' : 'bg-red-400'}`}
-                style={{ width: `${Math.min(100, data.conversionRate * 100)}%` }}
-              />
-            </div>
-          </div>
-          <div className="pt-1">
-            <div className="flex items-center gap-2 text-xs text-zinc-500">
-              <span className="h-2 w-2 rounded-full bg-zinc-300" />
-              <span>Umbral mínimo: 20%</span>
-              <span className="ml-auto">
-                {isAboveThreshold ? '✓ Por encima del umbral' : '✗ Por debajo del umbral'}
-              </span>
+      {data.successThresholds && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border border-zinc-200 bg-white p-6 col-span-full">
+            <h2 className="text-lg font-semibold text-zinc-900 mb-4 border-b pb-3">Umbrales de Éxito Extraídos</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div>
+                <p className="text-sm text-zinc-500 mb-1">Cierre rápido</p>
+                <p className="text-xl font-medium">&lt; {data.successThresholds.fastCloseThreshold} días</p>
+              </div>
+              <div>
+                <p className="text-sm text-zinc-500 mb-1">Riesgo de respuesta</p>
+                <p className="text-xl font-medium text-amber-600">&gt; {data.successThresholds.dangerResponseThreshold} min</p>
+              </div>
+              <div>
+                <p className="text-sm text-zinc-500 mb-1">Respuesta ideal</p>
+                <p className="text-xl font-medium text-green-600">&lt; {data.successThresholds.idealResponseThreshold} min</p>
+              </div>
+              <div>
+                <p className="text-sm text-zinc-500 mb-1">Volumen mensajes</p>
+                <p className="text-xl font-medium">~ {data.successThresholds.avgMessagesPerDeal} msgs</p>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      <div className="grid gap-6 md:grid-cols-2">
+          {data.businessFeatures && (
+            <div className="rounded-xl border border-zinc-200 bg-white p-6">
+                <h2 className="text-sm font-semibold text-zinc-700 mb-4">Top Business Features</h2>
+                <div className="space-y-4">
+                  <div>
+                      <p className="text-xs font-medium text-zinc-500 uppercase">Top Canal</p>
+                      <p className="text-lg mt-1 capitalize">{data.businessFeatures.topChannel}</p>
+                  </div>
+                  {data.businessFeatures.channelWinRates && Object.keys(data.businessFeatures.channelWinRates).length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-zinc-500 uppercase mb-2">Win Rate por Canal</p>
+                        {Object.entries(data.businessFeatures.channelWinRates).map(([ch, rate]) => (
+                            <div key={ch} className="flex justify-between items-center text-sm py-1 border-b border-zinc-50 last:border-0">
+                                <span className="capitalize text-zinc-700">{ch}</span>
+                                <span className="font-mono">{Number(rate).toFixed(1)}%</span>
+                            </div>
+                        ))}
+                      </div>
+                  )}
+                </div>
+            </div>
+          )}
+
+          {data.communicationPatterns && (
+            <div className="rounded-xl border border-zinc-200 bg-white p-6">
+                <h2 className="text-sm font-semibold text-zinc-700 mb-4">Patrones de Comunicación</h2>
+                <div className="space-y-4">
+                  <div>
+                      <p className="text-xs font-medium text-zinc-500 uppercase">Tiempo resp. promedio</p>
+                      <p className="text-lg mt-1">{data.communicationPatterns.avgResponseMinutes} min</p>
+                  </div>
+                  <div>
+                      <p className="text-xs font-medium text-zinc-500 uppercase">Tiempo resp. mediano</p>
+                      <p className="text-lg mt-1">{data.communicationPatterns.medianResponseMinutes} min</p>
+                  </div>
+                  <div>
+                      <p className="text-xs font-medium text-zinc-500 uppercase">Ratio Inbound</p>
+                      <p className="text-lg mt-1">{(data.communicationPatterns.avgInboundRatio * 100).toFixed(1)}%</p>
+                  </div>
+                </div>
+            </div>
+          )}
       </div>
+
     </div>
   );
 }

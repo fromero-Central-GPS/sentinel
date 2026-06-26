@@ -44,8 +44,7 @@ async function resolveTenantId(): Promise<{ orgDbId: string; clerkOrgId: string 
   const [org] = await db
     .select({ id: organizations.id })
     .from(organizations)
-    .where(eq(organizations.clerkOrgId, orgId))
-    .execute();
+    .where(eq(organizations.clerkOrgId, orgId));
 
   if (!org) return null;
   return { orgDbId: org.id, clerkOrgId: orgId };
@@ -70,8 +69,7 @@ export async function getTenantPlanLimits(): Promise<PlanLimits | null> {
     })
     .from(subscriptions)
     .innerJoin(plans, eq(subscriptions.planId, plans.id))
-    .where(eq(subscriptions.organizationId, tenant.orgDbId))
-    .execute();
+    .where(eq(subscriptions.organizationId, tenant.orgDbId));
 
   // No subscription → default to free plan limits
   const defaults: PlanLimits = {
@@ -156,8 +154,7 @@ export async function getCurrentUsage(): Promise<{ conversations: number; forens
         eq(usageLog.organizationId, tenant.orgDbId),
         eq(usageLog.periodKey, periodKey)
       )
-    )
-    .execute();
+    );
 
   if (!record) {
     return { conversations: 0, forense: 0, liveOpp: 0, wonTrack: 0 };
@@ -186,8 +183,7 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
         eq(usageLog.organizationId, tenant.orgDbId),
         eq(usageLog.periodKey, periodKey)
       )
-    )
-    .execute();
+    );
 
   if (existing) {
     const currentConversations = parseInt(existing.conversationsAnalyzed, 10);
@@ -201,8 +197,7 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
         [fieldKey]: String(currentRuns + 1),
         updatedAt: new Date(),
       })
-      .where(eq(usageLog.id, existing.id))
-      .execute();
+      .where(eq(usageLog.id, existing.id));
   } else {
     const forenseRuns = motor === 'forense' ? '1' : '0';
     const liveOppRuns = motor === 'liveOpp' ? '1' : '0';
@@ -217,8 +212,7 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
         forenseRuns,
         liveOppRuns,
         wonTrackRuns,
-      })
-      .execute();
+      });
   }
 }
 

@@ -124,6 +124,13 @@ export default function OnboardingPage() {
         slug: orgSlug.trim() || undefined,
       });
       if (created) {
+        // Sync org and user to Neon DB immediately (bypasses webhook delay)
+        try {
+          await fetch('/api/orgs/sync', { method: 'POST' });
+        } catch {
+          // Non-critical — webhook will catch it eventually
+          console.warn('Org sync to Neon failed, webhook will handle');
+        }
         setStep('ghl');
       }
     } catch (e: any) {
