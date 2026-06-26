@@ -1,5 +1,17 @@
 # Google OAuth Setup — Clerk Production Instance
 
+## ⚠️ Diagnóstico actualizado (2026-06-26)
+
+La API de Clerk (`clerk.supersonics.cl/v1/environment`) muestra:
+
+1. **Google One Tap está habilitado** (`google_one_tap` en first_factors) — esto requiere Google OAuth credentials para funcionar
+2. **Google OAuth está habilitado** (`oauth_google.enabled = true`)
+3. **NO hay Client ID/Secret configurado** (sin `custom_credentials`)
+
+**Si Google One Tap está activado SIN credenciales, causa exactamente el error `Missing required parameter: client_id`.**
+
+→ Recomendación: **deshabilitar Google One Tap** en Clerk Dashboard hasta que las credenciales OAuth estén configuradas. Esto evitará el error y permitirá que email/password funcione sin interferencia.
+
 ## Problema
 
 `clerk.supersonics.cl` es una instancia **production** de Clerk. Las instancias production **no tienen** shared OAuth credentials como las de desarrollo. El error:
@@ -70,6 +82,41 @@ El sign-in con **email + password** funciona sin Google OAuth:
 2. Crear cuenta con email + password
 3. Verificar el código enviado al email
 4. Sign in con email + password
+
+## Troubleshooting
+
+### Error: "Missing required parameter: client_id"
+
+1. Verificar que Google One Tap **NO** esté habilitado sin credenciales:
+   - Clerk Dashboard → User & Authentication → Social Connections → Google
+   - Desmarcar **"Enable Google One Tap"** si no hay Client ID configurado
+2. Verificar que las credenciales OAuth estén correctamente guardadas:
+   - Clerk Dashboard → Social Connections → Google
+   - Debe mostrar **"Custom credentials"** como activo
+   - Client ID y Client Secret deben estar completos
+
+### Error: "redirect_uri_mismatch"
+
+El redirect URI en Google Cloud Console no coincide con el de Clerk:
+- Google Cloud Console: `https://clerk.supersonics.cl/v1/oauth_callback/google`
+- Verificar que sea exactamente igual (sin `/` al final, sin http://)
+
+### Verificar estado actual
+
+```bash
+# Ver estado de Google OAuth en Clerk
+curl -s https://clerk.supersonics.cl/v1/environment | python3 -c "
+import sys,json
+d = json.load(sys.stdin)
+google = d['user_settings']['social']['oauth_google']
+print(f'Google OAuth enabled: {google[\"enabled\"]}')
+# Verificar first_factors para Google One Tap
+ff = d['auth_config']['first_factors']
+print(f'First factors: {ff}')
+if 'google_one_tap' in ff:
+    print('⚠️  Google One Tap habilitado — requiere credenciales OAuth!')
+"
+```
 
 ## References
 
