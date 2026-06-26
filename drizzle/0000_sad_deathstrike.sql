@@ -23,6 +23,37 @@ CREATE TABLE "organizations" (
 	CONSTRAINT "organizations_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
+CREATE TABLE "plans" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" text NOT NULL,
+	"slug" text NOT NULL,
+	"description" text,
+	"price_monthly_clp" text,
+	"features" text,
+	"max_tenant_users" text DEFAULT '5',
+	"max_conversations_per_month" text DEFAULT '1000',
+	"has_forense" text DEFAULT 'true',
+	"has_live_opp" text DEFAULT 'true',
+	"has_won_track" text DEFAULT 'true',
+	"is_active" text DEFAULT 'true',
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "plans_slug_unique" UNIQUE("slug")
+);
+--> statement-breakpoint
+CREATE TABLE "subscriptions" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"organization_id" uuid NOT NULL,
+	"plan_id" uuid NOT NULL,
+	"status" text DEFAULT 'active' NOT NULL,
+	"current_period_start" timestamp DEFAULT now() NOT NULL,
+	"current_period_end" timestamp,
+	"cancelled_at" timestamp,
+	"trial_ends_at" timestamp,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "user_organizations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
@@ -42,5 +73,7 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_clerk_id_unique" UNIQUE("clerk_id")
 );
 --> statement-breakpoint
+ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_plan_id_plans_id_fk" FOREIGN KEY ("plan_id") REFERENCES "public"."plans"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_organizations" ADD CONSTRAINT "user_organizations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_organizations" ADD CONSTRAINT "user_organizations_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;

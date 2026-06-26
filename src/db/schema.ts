@@ -45,3 +45,39 @@ export const appSettings = pgTable('app_settings', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// ─── Billing ────────────────────────────────────────────────────────────
+
+export const plans = pgTable('plans', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),                    // e.g. "Free", "Pro", "Enterprise"
+  slug: text('slug').notNull().unique(),            // e.g. "free", "pro", "enterprise"
+  description: text('description'),
+  priceMonthlyClp: text('price_monthly_clp'),       // e.g. "0", "49900", "149900"
+  features: text('features'),                       // JSON array of feature strings
+  maxTenantUsers: text('max_tenant_users').default('5'),
+  maxConversationsPerMonth: text('max_conversations_per_month').default('1000'),
+  hasForense: text('has_forense').default('true'),
+  hasLiveOpp: text('has_live_opp').default('true'),
+  hasWonTrack: text('has_won_track').default('true'),
+  isActive: text('is_active').default('true'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const subscriptions = pgTable('subscriptions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  planId: uuid('plan_id')
+    .notNull()
+    .references(() => plans.id),
+  status: text('status').notNull().default('active'), // active, cancelled, past_due, trialing
+  currentPeriodStart: timestamp('current_period_start').defaultNow().notNull(),
+  currentPeriodEnd: timestamp('current_period_end'),
+  cancelledAt: timestamp('cancelled_at'),
+  trialEndsAt: timestamp('trial_ends_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});

@@ -22,7 +22,7 @@ const ENGINES = [
     href: '/dashboard/live-opp',
     title: 'Live Opp',
     description: 'Detecta oportunidades abiertas en riesgo antes de que se pierdan. Alertas tempranas por inactividad.',
-    status: 'soon' as const,
+    status: 'active' as const,
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
@@ -30,13 +30,13 @@ const ENGINES = [
     ),
     color: 'text-blue-600',
     bg: 'bg-blue-50',
-    border: 'border-zinc-200 hover:border-blue-300 hover:bg-blue-50/50',
+    border: 'border-blue-100 hover:border-blue-300 hover:bg-blue-50/50',
   },
   {
     href: '/dashboard/won-track',
     title: 'Won Track',
     description: 'Monitorea patrones de deals ganados. Identifica señales y tiempos de cierre que replican el éxito.',
-    status: 'soon' as const,
+    status: 'active' as const,
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
@@ -49,7 +49,7 @@ const ENGINES = [
     ),
     color: 'text-green-600',
     bg: 'bg-green-50',
-    border: 'border-zinc-200 hover:border-green-300 hover:bg-green-50/50',
+    border: 'border-green-100 hover:border-green-300 hover:bg-green-50/50',
   },
 ];
 
