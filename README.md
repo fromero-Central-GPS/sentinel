@@ -65,26 +65,35 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ### Environments
 
-| Branch | Environment | URL |
-|--------|-------------|-----|
-| `dev` | Preview | `sentinel-dev.vercel.app` |
-| `staging` | Preview | `sentinel-staging.vercel.app` |
-| `main` | Production | `sentinel.vercel.app` |
+| Branch | Environment | Domain |
+|--------|-------------|--------|
+| `dev` | Preview | `sentinel-fleet-dev.vercel.app` |
+| `staging` | Preview | `sentinel-fleet-staging.vercel.app` |
+| `main` | Production | `sentinel-fleet.vercel.app` |
+
+> **Note:** `sentinel*.vercel.app` (dev, staging, prod base) were taken. `sentinel-fleet*` was chosen as the alternative naming — all three variants were verified available as of 2026-06-26.
 
 ### Vercel Setup
 
 ```bash
-# 1. Link project
+# 1. Link project to Vercel (requires valid Vercel token)
 vercel link
 
-# 2. Pull/configure env vars per environment
+# 2. Configure production domain
+vercel domains add sentinel-fleet.vercel.app
+
+# 3. Configure staging domain (branch alias)
+vercel alias <staging-deploy-url> sentinel-fleet-staging.vercel.app
+
+# 4. Pull/configure env vars per environment
 vercel env pull .env.vercel.local
 vercel env add DATABASE_URL production
 vercel env add DATABASE_URL preview
 
-# 3. Deploy
-vercel deploy --prod  # production
-vercel deploy          # preview
+# 5. Deploy
+git push origin main    # triggers production deploy
+git push origin staging # triggers staging preview deploy
+git push origin dev     # triggers dev preview deploy
 ```
 
 ### Neon Branches
