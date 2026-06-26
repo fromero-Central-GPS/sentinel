@@ -11,30 +11,30 @@ export default async function DashboardPage() {
 
   const stats = [
     {
-      label: 'Fleet Status',
-      value: 'Ready',
-      detail: 'All systems operational',
+      label: 'Estado',
+      value: 'Activo',
+      detail: 'Todos los sistemas operativos',
       color: 'text-green-600',
       bgColor: 'bg-green-50',
     },
     {
-      label: 'Integrations',
-      value: 'Pending',
-      detail: 'GHL + Meta setup required',
+      label: 'Integraciones',
+      value: 'Pendiente',
+      detail: 'Configura GHL + Meta en Settings',
       color: 'text-amber-600',
       bgColor: 'bg-amber-50',
     },
     {
-      label: 'Database',
-      value: 'Connected',
+      label: 'Base de datos',
+      value: 'Conectada',
       detail: 'Neon Serverless Postgres',
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
     },
     {
-      label: 'Auth Provider',
+      label: 'Tenant',
       value: 'Clerk',
-      detail: sessionClaims?.org_id ? 'Organization' : 'Personal account',
+      detail: sessionClaims?.org_id ? 'Organización activa' : 'Sin organización',
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
     },
@@ -45,7 +45,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Fleet intelligence and monitoring overview
+          Centro de control de conversaciones y oportunidades comerciales
         </p>
       </div>
 
@@ -69,9 +69,9 @@ export default async function DashboardPage() {
 
       {/* Quick Setup */}
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-        <h2 className="text-lg font-semibold">Quick Setup</h2>
+        <h2 className="text-lg font-semibold">Configuración inicial</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Configure your integrations to start monitoring your fleet.
+          Conecta GHL y Meta para activar el análisis de conversaciones de tu tenant.
         </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Link
@@ -103,8 +103,8 @@ export default async function DashboardPage() {
               </svg>
             </div>
             <div>
-              <p className="font-medium">Fleet View</p>
-              <p className="text-xs text-zinc-500">Coming soon</p>
+              <p className="font-medium">Análisis de conversaciones</p>
+              <p className="text-xs text-zinc-500">Próximamente</p>
             </div>
           </div>
         </div>

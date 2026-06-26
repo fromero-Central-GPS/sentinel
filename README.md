@@ -1,6 +1,6 @@
 # Sentinel
 
-Fleet intelligence and monitoring platform.
+Versión SaaS multitenant de Cassper Dashboard. Cada organización (tenant) conecta sus credenciales de GHL y Meta para acceder a los motores de análisis de conversaciones: Forense, Live Opp y Won Track.
 
 ## Stack
 

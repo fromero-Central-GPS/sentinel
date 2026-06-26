@@ -21,8 +21,8 @@ export default function Home() {
       <main className="flex flex-col items-center gap-8 text-center max-w-2xl">
         <h1 className="text-5xl font-bold tracking-tight">Sentinel</h1>
         <p className="text-xl text-zinc-600 dark:text-zinc-400 max-w-md">
-          Fleet intelligence and monitoring platform. Track, analyze, and optimize your fleet
-          operations in real-time.
+          Cassper para tu empresa. Analiza conversaciones perdidas, monitorea oportunidades en
+          riesgo y recupera revenue — para múltiples equipos comerciales.
         </p>
         <div className="flex gap-4">
           <Show when="signed-in">
