@@ -1,271 +1,300 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { BatchAnalysisResult, ConversationAnalysis, LossReasonCategory, RecoverabilityPriority } from '@/lib/analysis-engine';
 
-type LossReason = {
-  category: string;
-  confidence: number;
-  evidence: string[];
-};
-
-type ConversationAnalysis = {
-  conversationId: string;
-  contactName: string;
-  opportunityValue: number;
-  funnelStage: string;
-  lossReason: LossReason;
-  recoverability: number;
-  summary: string;
-};
-
-type BatchResult = {
-  analyzedAt?: string;
-  totalAnalyzed: number;
-  totalValue: number;
-  analyses: ConversationAnalysis[];
-  topLossReasons: Array<{ category: string; count: number; totalValue: number }>;
-};
-
-type ApiResponse = {
-  batchResult: BatchResult | null;
+type ForenseResponse = {
+  batchResult: BatchAnalysisResult;
   _meta: {
-    mode: string;
-    analyzedAt?: string;
-    conversationCount?: number;
-    configured?: boolean;
+    mode: 'live' | 'mock';
+    analyzedAt: string;
     note?: string;
+    source?: string;
   };
-  error?: string;
-  hint?: string;
 };
 
-const LOSS_REASON_LABELS: Record<string, string> = {
+const PRIORITY_CONFIG: Record<RecoverabilityPriority, { label: string; className: string }> = {
+  urgent: { label: 'URGENTE', className: 'bg-red-100 text-red-700 ring-1 ring-red-200' },
+  high: { label: 'ALTA', className: 'bg-amber-100 text-amber-700 ring-1 ring-amber-200' },
+  medium: { label: 'MEDIA', className: 'bg-blue-100 text-blue-700 ring-1 ring-blue-200' },
+  low: { label: 'BAJA', className: 'bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200' },
+};
+
+const REASON_LABELS: Record<LossReasonCategory, string> = {
   sin_seguimiento: 'Sin seguimiento',
   precio: 'Precio',
   competidor: 'Competidor',
-  producto_no_disponible: 'Producto no disponible',
-  falta_informacion: 'Falta de información',
+  producto_no_disponible: 'Prod. no disponible',
+  falta_informacion: 'Falta información',
   proceso_complejo: 'Proceso complejo',
   cliente_explorando: 'Cliente explorando',
   desconocido: 'Desconocido',
 };
 
-const LOSS_REASON_COLORS: Record<string, string> = {
-  sin_seguimiento: 'bg-red-100 text-red-700',
-  precio: 'bg-orange-100 text-orange-700',
-  competidor: 'bg-yellow-100 text-yellow-700',
-  producto_no_disponible: 'bg-purple-100 text-purple-700',
-  falta_informacion: 'bg-blue-100 text-blue-700',
-  proceso_complejo: 'bg-indigo-100 text-indigo-700',
-  cliente_explorando: 'bg-green-100 text-green-700',
-  desconocido: 'bg-zinc-100 text-zinc-600',
-};
-
-function formatCLP(value: number) {
-  return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(value);
+function formatCLP(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+  return `$${value}`;
 }
 
-function RecoverabilityBar({ score }: { score: number }) {
-  const pct = Math.round(score * 100);
-  const color = pct >= 70 ? 'bg-green-500' : pct >= 40 ? 'bg-amber-500' : 'bg-red-400';
+function PriorityBadge({ priority }: { priority: RecoverabilityPriority }) {
+  const cfg = PRIORITY_CONFIG[priority];
   return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 flex-1 rounded-full bg-zinc-200">
-        <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-xs font-mono text-zinc-500">{pct}%</span>
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${cfg.className}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
+function SummaryCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white p-5">
+      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">{label}</p>
+      <p className={`mt-2 text-2xl font-bold ${accent ?? 'text-zinc-900'}`}>{value}</p>
+      {sub && <p className="mt-1 text-xs text-zinc-500">{sub}</p>}
     </div>
   );
 }
 
+function ConversationRow({ item }: { item: ConversationAnalysis }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <tr
+        className="cursor-pointer hover:bg-zinc-50 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <td className="py-3 px-4 text-sm font-medium text-zinc-900">{item.contactName}</td>
+        <td className="py-3 px-4">
+          <PriorityBadge priority={item.recoverability.priority} />
+        </td>
+        <td className="py-3 px-4 text-sm text-zinc-600">{item.recoverability.totalScore}/100</td>
+        <td className="py-3 px-4 text-sm text-zinc-700 font-mono">{formatCLP(item.opportunityValue)}</td>
+        <td className="py-3 px-4 text-sm text-zinc-600">
+          {REASON_LABELS[item.lossReason.primaryReason]}
+        </td>
+        <td className="py-3 px-4 text-sm text-zinc-500">
+          {item.abandonment.daysSinceLastContact}d
+        </td>
+        <td className="py-3 px-4 text-sm text-zinc-500">{item.channel}</td>
+        <td className="py-3 px-4 text-center text-zinc-400 text-xs">
+          {expanded ? '▲' : '▼'}
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="bg-zinc-50">
+          <td colSpan={8} className="px-4 pb-4 pt-2">
+            <div className="grid gap-4 sm:grid-cols-2 text-sm">
+              <div>
+                <p className="font-medium text-zinc-700 mb-1">Etapa detectada</p>
+                <p className="text-zinc-600">{item.stageClassification.detectedStage.replace(/_/g, ' ')}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Confianza: {Math.round(item.stageClassification.confidence * 100)}%
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-zinc-700 mb-1">Razón de pérdida</p>
+                <p className="text-zinc-600">{REASON_LABELS[item.lossReason.primaryReason]}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Confianza: {Math.round(item.lossReason.confidence * 100)}%
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-zinc-700 mb-1">Acción sugerida</p>
+                <p className="text-zinc-600">{item.lossReason.suggestedAction}</p>
+              </div>
+              <div>
+                <p className="font-medium text-zinc-700 mb-1">Señales de compra</p>
+                {item.intentSignals.signals.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {item.intentSignals.signals.map((s) => (
+                      <span key={s} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
+                        {s.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-zinc-400 text-xs">Ninguna detectada</p>
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-zinc-700 mb-1">Factores de recuperabilidad</p>
+                {item.recoverability.factors.length > 0 ? (
+                  <ul className="text-xs text-zinc-600 space-y-0.5">
+                    {item.recoverability.factors.map((f, i) => (
+                      <li key={i}>· {f}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-zinc-400 text-xs">Sin factores destacados</p>
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-zinc-700 mb-1">Dirección del abandono</p>
+                <p className="text-zinc-600">
+                  {item.abandonment.direction === 'inbound_sin_respuesta'
+                    ? '⚠️ Cliente esperando respuesta'
+                    : item.abandonment.direction === 'outbound_sin_respuesta'
+                    ? 'Seguimiento sin respuesta del cliente'
+                    : item.abandonment.direction === 'mutuo_silencio'
+                    ? 'Silencio mutuo'
+                    : 'Conversación activa'}
+                </p>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
 export default function ForensePage() {
-  const [data, setData] = useState<ApiResponse | null>(null);
-  const [mode, setMode] = useState<'mock' | 'live'>('mock');
-  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ForenseResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(m: 'mock' | 'live') {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/ghl/forensics?mode=${m}`);
-      const json = await res.json() as ApiResponse;
-      if (!res.ok) {
-        setError(json.error ?? 'Error desconocido');
-        setData(json);
-      } else {
-        setData(json);
-      }
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    fetch('/api/forense')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) throw new Error(d.error);
+        setData(d);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center justify-center min-h-64">
+        <div className="text-sm text-zinc-500 animate-pulse">Analizando conversaciones…</div>
+      </div>
+    );
   }
 
-  useEffect(() => { void load(mode); }, [mode]);
+  if (error || !data) {
+    return (
+      <div className="p-8">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          Error al cargar análisis: {error ?? 'Respuesta vacía'}
+        </div>
+      </div>
+    );
+  }
 
-  const batch = data?.batchResult;
-  const meta = data?._meta;
+  const { batchResult, _meta } = data;
+  const { summary } = batchResult;
 
   return (
     <div className="p-6 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Motor Forense</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Forense</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Clasifica conversaciones perdidas por fase y causa raíz
+            Análisis de conversaciones perdidas — clasificación por causa raíz y recuperabilidad
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setMode('mock')}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'mock' ? 'bg-zinc-900 text-white' : 'border border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
-          >
-            Demo
-          </button>
-          <button
-            onClick={() => setMode('live')}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${mode === 'live' ? 'bg-blue-600 text-white' : 'border border-zinc-200 text-zinc-600 hover:bg-zinc-50'}`}
-          >
-            Live (GHL)
-          </button>
-          {!loading && (
-            <button
-              onClick={() => void load(mode)}
-              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
-            >
-              ↺ Actualizar
-            </button>
-          )}
-        </div>
+        <span
+          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+            _meta.mode === 'live'
+              ? 'bg-green-100 text-green-700'
+              : 'bg-amber-100 text-amber-700'
+          }`}
+        >
+          {_meta.mode === 'live' ? '● Datos reales' : '● Demo'}
+        </span>
       </div>
 
-      {/* Mode banner */}
-      {meta && (
-        <div className={`rounded-lg px-4 py-2.5 text-sm ${meta.mode === 'mock' ? 'bg-amber-50 border border-amber-200 text-amber-800' : 'bg-blue-50 border border-blue-200 text-blue-800'}`}>
-          {meta.mode === 'mock' ? (
-            <span>⚠ Modo demo — {meta.note}</span>
-          ) : (
-            <span>✓ Datos reales de GHL · {meta.conversationCount ?? 0} conversaciones analizadas</span>
-          )}
+      {/* Mock notice */}
+      {_meta.mode === 'mock' && _meta.note && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {_meta.note}{' '}
+          <a href="/settings" className="font-semibold underline hover:no-underline">
+            Ir a Settings →
+          </a>
         </div>
       )}
 
-      {/* Error */}
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          <strong>Error:</strong> {error}
-          {data?.hint && <p className="mt-1 text-red-700">{data.hint}</p>}
-        </div>
-      )}
+      {/* KPI Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryCard
+          label="Conversaciones analizadas"
+          value={String(batchResult.totalAnalyzed)}
+          sub={`Analizadas el ${new Date(_meta.analyzedAt).toLocaleDateString('es-CL')}`}
+        />
+        <SummaryCard
+          label="Valor perdido total"
+          value={formatCLP(summary.totalValue)}
+          accent="text-red-600"
+          sub="Suma de oportunidades perdidas"
+        />
+        <SummaryCard
+          label="Valor recuperable"
+          value={formatCLP(summary.recoverableValue)}
+          accent="text-green-600"
+          sub={`${summary.highPriorityCount} opps. de alta prioridad`}
+        />
+        <SummaryCard
+          label="Urgentes"
+          value={String(summary.urgentCount)}
+          accent="text-red-600"
+          sub="Requieren acción inmediata"
+        />
+      </div>
 
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center gap-3 py-8 text-zinc-500">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-blue-600" />
-          <span className="text-sm">Analizando conversaciones…</span>
-        </div>
-      )}
-
-      {/* Summary cards */}
-      {!loading && batch && (
-        <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border border-zinc-200 bg-white p-5">
-              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Conversaciones</p>
-              <p className="mt-2 text-3xl font-bold text-zinc-900">{batch.totalAnalyzed}</p>
-              <p className="mt-1 text-xs text-zinc-500">analizadas</p>
-            </div>
-            <div className="rounded-xl border border-zinc-200 bg-white p-5">
-              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Revenue en riesgo</p>
-              <p className="mt-2 text-3xl font-bold text-red-600">{formatCLP(batch.totalValue)}</p>
-              <p className="mt-1 text-xs text-zinc-500">total perdido</p>
-            </div>
-            <div className="rounded-xl border border-zinc-200 bg-white p-5">
-              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Causa principal</p>
-              <p className="mt-2 text-xl font-bold text-zinc-900">
-                {batch.topLossReasons[0]
-                  ? LOSS_REASON_LABELS[batch.topLossReasons[0].category] ?? batch.topLossReasons[0].category
-                  : '—'}
-              </p>
-              <p className="mt-1 text-xs text-zinc-500">
-                {batch.topLossReasons[0]?.count ?? 0} conversaciones
-              </p>
-            </div>
+      {/* Top loss reasons */}
+      {summary.topLossReasons.length > 0 && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-5">
+          <h2 className="text-sm font-semibold text-zinc-700 mb-3">Razones de pérdida</h2>
+          <div className="flex flex-wrap gap-2">
+            {summary.topLossReasons.slice(0, 6).map((r) => (
+              <div
+                key={r.reason}
+                className="flex items-center gap-2 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2"
+              >
+                <span className="text-sm font-medium text-zinc-700">
+                  {REASON_LABELS[r.reason]}
+                </span>
+                <span className="text-xs text-zinc-500">{r.count} caso{r.count !== 1 ? 's' : ''}</span>
+                <span className="text-xs font-mono text-zinc-600">{formatCLP(r.value)}</span>
+              </div>
+            ))}
           </div>
-
-          {/* Top loss reasons */}
-          {batch.topLossReasons.length > 0 && (
-            <div className="rounded-xl border border-zinc-200 bg-white p-6">
-              <h2 className="font-semibold mb-4">Causas de pérdida</h2>
-              <div className="space-y-3">
-                {batch.topLossReasons.map((reason) => {
-                  const label = LOSS_REASON_LABELS[reason.category] ?? reason.category;
-                  const colorClass = LOSS_REASON_COLORS[reason.category] ?? 'bg-zinc-100 text-zinc-600';
-                  const pct = Math.round((reason.count / batch.totalAnalyzed) * 100);
-                  return (
-                    <div key={reason.category} className="flex items-center gap-3">
-                      <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
-                        {label}
-                      </span>
-                      <div className="flex-1 h-2 rounded-full bg-zinc-100">
-                        <div className="h-2 rounded-full bg-blue-500 opacity-70" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-xs text-zinc-500 w-8 text-right">{pct}%</span>
-                      <span className="text-xs text-zinc-400 w-24 text-right font-mono">{formatCLP(reason.totalValue)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Per-conversation analysis */}
-          {batch.analyses && batch.analyses.length > 0 && (
-            <div className="rounded-xl border border-zinc-200 bg-white">
-              <div className="px-6 py-4 border-b border-zinc-100">
-                <h2 className="font-semibold">Análisis por conversación</h2>
-              </div>
-              <div className="divide-y divide-zinc-100">
-                {batch.analyses.map((analysis) => {
-                  const reasonLabel = LOSS_REASON_LABELS[analysis.lossReason?.category] ?? analysis.lossReason?.category ?? '—';
-                  const colorClass = LOSS_REASON_COLORS[analysis.lossReason?.category] ?? 'bg-zinc-100 text-zinc-600';
-                  return (
-                    <div key={analysis.conversationId} className="px-6 py-4 space-y-2">
-                      <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <div>
-                          <p className="font-medium text-zinc-900">{analysis.contactName}</p>
-                          <p className="text-xs text-zinc-500 mt-0.5">{analysis.funnelStage}</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
-                            {reasonLabel}
-                          </span>
-                          <span className="text-sm font-semibold text-zinc-700">
-                            {formatCLP(analysis.opportunityValue)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-zinc-500 mb-1">Recuperabilidad</p>
-                        <RecoverabilityBar score={analysis.recoverability} />
-                      </div>
-
-                      {analysis.summary && (
-                        <p className="text-xs text-zinc-600 italic">{analysis.summary}</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </>
+        </div>
       )}
+
+      {/* Conversations table */}
+      <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
+        <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-700">
+            Conversaciones ({batchResult.conversations.length})
+          </h2>
+          <p className="text-xs text-zinc-400">Ordenado por recuperabilidad ↓</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-zinc-100 bg-zinc-50">
+                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Contacto</th>
+                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Prioridad</th>
+                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Score</th>
+                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Valor</th>
+                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Causa raíz</th>
+                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Inactividad</th>
+                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Canal</th>
+                <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {batchResult.conversations.map((conv) => (
+                <ConversationRow key={conv.conversationId} item={conv} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
