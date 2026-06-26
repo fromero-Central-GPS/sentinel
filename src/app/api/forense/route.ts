@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { decrypt } from '@/lib/encryption';
+import { enforceMotorAccess, incrementUsage } from '@/lib/plan-enforcement';
 import {
   analyzeConversation,
   generateBatchSummary,
@@ -186,6 +187,10 @@ export async function GET(request: Request) {
   const { orgId } = await auth();
   if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Plan enforcement
+  const enforcement = await enforceMotorAccess('forense');
+  if (enforcement.blocked) return enforcement.response!;
+
   const { searchParams } = new URL(request.url);
   const mode = searchParams.get('mode') ?? 'auto';
 
@@ -200,6 +205,7 @@ export async function GET(request: Request) {
       const ghlLocationId = settings.ghlLocationId!;
       const result = await fetchGHLForense(ghlToken, ghlLocationId);
       if (result) {
+        await incrementUsage('forense', result.totalAnalyzed);
         return NextResponse.json({
           batchResult: result,
           _meta: {
@@ -231,6 +237,9 @@ export async function GET(request: Request) {
   }));
 
   const batchResult = runAnalysis(conversations, opps, 'Demo Pipeline');
+
+  // Track usage (mock mode)
+  await incrementUsage('forense', batchResult.totalAnalyzed);
 
   return NextResponse.json({
     batchResult,

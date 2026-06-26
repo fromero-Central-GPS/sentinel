@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { decrypt } from '@/lib/encryption';
+import { enforceMotorAccess, incrementUsage } from '@/lib/plan-enforcement';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const GHL_VERSION = '2021-07-28';
@@ -17,6 +18,10 @@ export async function GET() {
   if (!row?.ghlApiToken || !row?.ghlLocationId) {
     return NextResponse.json({ error: 'GHL credentials not configured' }, { status: 400 });
   }
+
+  // Plan enforcement
+  const enforcement = await enforceMotorAccess('liveOpp');
+  if (enforcement.blocked) return enforcement.response!;
 
   const token = decrypt(row.ghlApiToken);
   const locationId = row.ghlLocationId;
@@ -57,6 +62,9 @@ export async function GET() {
     })
     .filter((o) => o.daysSinceActivity >= DAYS_AT_RISK_THRESHOLD)
     .sort((a, b) => b.riskScore - a.riskScore);
+
+  // Track usage
+  await incrementUsage('liveOpp', rawOpps.length);
 
   return NextResponse.json({
     totalAtRisk: atRisk.length,

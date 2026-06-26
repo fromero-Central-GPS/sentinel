@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { decrypt } from '@/lib/encryption';
+import { enforceMotorAccess, incrementUsage } from '@/lib/plan-enforcement';
 import {
   classifyFunnelStage,
   diagnoseLossReason,
@@ -26,6 +27,10 @@ export async function GET() {
   if (!row?.ghlApiToken || !row?.ghlLocationId) {
     return NextResponse.json({ error: 'GHL credentials not configured' }, { status: 400 });
   }
+
+  // Plan enforcement
+  const enforcement = await enforceMotorAccess('forense');
+  if (enforcement.blocked) return enforcement.response!;
 
   const token = decrypt(row.ghlApiToken);
   const locationId = row.ghlLocationId;
@@ -97,6 +102,10 @@ export async function GET() {
   });
 
   const batchResult = generateBatchSummary(analyses, locationId, 'Forense');
+
+  // Track usage
+  await incrementUsage('forense', analyses.length);
+
   return NextResponse.json(batchResult);
 }
 

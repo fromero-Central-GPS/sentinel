@@ -81,3 +81,19 @@ export const subscriptions = pgTable('subscriptions', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// ─── Usage tracking ─────────────────────────────────────────────────────
+
+export const usageLog = pgTable('usage_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  periodKey: text('period_key').notNull(),        // e.g. "2026-06"
+  conversationsAnalyzed: text('conversations_analyzed').notNull().default('0'),
+  forenseRuns: text('forense_runs').notNull().default('0'),
+  liveOppRuns: text('live_opp_runs').notNull().default('0'),
+  wonTrackRuns: text('won_track_runs').notNull().default('0'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});

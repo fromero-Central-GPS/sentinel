@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { decrypt } from '@/lib/encryption';
+import { enforceMotorAccess, incrementUsage } from '@/lib/plan-enforcement';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const GHL_VERSION = '2021-07-28';
@@ -18,6 +19,10 @@ export async function GET() {
   if (!row?.ghlApiToken || !row?.ghlLocationId) {
     return NextResponse.json({ error: 'GHL credentials not configured' }, { status: 400 });
   }
+
+  // Plan enforcement
+  const enforcement = await enforceMotorAccess('wonTrack');
+  if (enforcement.blocked) return enforcement.response!;
 
   const token = decrypt(row.ghlApiToken);
   const locationId = row.ghlLocationId;
@@ -65,6 +70,9 @@ export async function GET() {
       message: `Tasa de conversión (${(conversionRate * 100).toFixed(1)}%) por debajo del umbral de ${CONVERSION_THRESHOLD * 100}%.`,
     });
   }
+
+  // Track usage
+  await incrementUsage('wonTrack', totalOpps.length);
 
   return NextResponse.json({
     period: '30d',
