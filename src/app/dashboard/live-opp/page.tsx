@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 type Opportunity = {
   id: string;
@@ -9,6 +9,8 @@ type Opportunity = {
   daysSinceActivity: number;
   riskScore: number;
   value: number;
+  riskLevel: string;
+  recommendedActions: string[];
 };
 
 type LiveOppData = {
@@ -24,17 +26,21 @@ function formatCLP(value: number): string {
   return `$${value}`;
 }
 
-function urgencyColor(days: number) {
-  if (days >= 21) return { dot: 'bg-red-500', badge: 'bg-red-50 text-red-700', label: 'Crítico' };
-  if (days >= 14) return { dot: 'bg-orange-500', badge: 'bg-orange-50 text-orange-700', label: 'Alto' };
-  if (days >= 7) return { dot: 'bg-amber-500', badge: 'bg-amber-50 text-amber-700', label: 'Moderado' };
-  return { dot: 'bg-green-500', badge: 'bg-green-50 text-green-700', label: 'Bajo' };
+function riskConfig(riskLevel: string) {
+  switch (riskLevel) {
+    case 'critical': return { dot: 'bg-red-500', badge: 'bg-red-50 text-red-700 ring-1 ring-red-200', label: 'Crítico' };
+    case 'high': return { dot: 'bg-orange-500', badge: 'bg-orange-50 text-orange-700 ring-1 ring-orange-200', label: 'Alto' };
+    case 'medium': return { dot: 'bg-amber-500', badge: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200', label: 'Medio' };
+    case 'low': return { dot: 'bg-blue-500', badge: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', label: 'Bajo' };
+    default: return { dot: 'bg-green-500', badge: 'bg-green-50 text-green-700', label: 'Sin riesgo' };
+  }
 }
 
 export default function LiveOppPage() {
   const [data, setData] = useState<LiveOppData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/engines/live-opp')
@@ -99,7 +105,7 @@ export default function LiveOppPage() {
         <div className="rounded-xl border border-zinc-200 bg-white p-5">
           <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Críticas</p>
           <p className="mt-2 text-3xl font-bold text-red-700">
-            {data.opportunities.filter((o) => o.daysSinceActivity >= 21).length}
+            {data.opportunities.filter((o) => o.riskLevel === 'critical').length}
           </p>
           <p className="mt-1 text-xs text-zinc-500">sin actividad 21+ días</p>
         </div>
@@ -127,24 +133,49 @@ export default function LiveOppPage() {
                   <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Sin actividad</th>
                   <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Etapa</th>
                   <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">Valor</th>
+                  <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {data.opportunities.map((opp) => {
-                  const u = urgencyColor(opp.daysSinceActivity);
+                  const rc = riskConfig(opp.riskLevel);
+                  const isExpanded = expandedId === opp.id;
                   return (
-                    <tr key={opp.id} className="hover:bg-zinc-50 transition-colors">
-                      <td className="py-3 px-4 text-sm font-medium text-zinc-900">{opp.name}</td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${u.badge}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${u.dot}`} />
-                          {u.label}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-zinc-700 font-mono">{opp.daysSinceActivity}d</td>
-                      <td className="py-3 px-4 text-sm text-zinc-500">{opp.stage || '—'}</td>
-                      <td className="py-3 px-4 text-sm text-zinc-700 font-mono">{formatCLP(opp.value)}</td>
-                    </tr>
+                    <Fragment key={opp.id}>
+                      <tr
+                        className={`cursor-pointer transition-colors ${isExpanded ? 'bg-zinc-50' : 'hover:bg-zinc-50'}`}
+                        onClick={() => setExpandedId(isExpanded ? null : opp.id)}
+                      >
+                        <td className="py-3 px-4 text-sm font-medium text-zinc-900">{opp.name}</td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${rc.badge}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${rc.dot}`} />
+                            {rc.label}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-zinc-700 font-mono">{opp.daysSinceActivity}d</td>
+                        <td className="py-3 px-4 text-sm text-zinc-500">{opp.stage || '—'}</td>
+                        <td className="py-3 px-4 text-sm text-zinc-700 font-mono">{formatCLP(opp.value)}</td>
+                        <td className="py-3 px-4 text-center text-zinc-400 text-xs">
+                          {isExpanded ? '▲' : '▼'}
+                        </td>
+                      </tr>
+                      {isExpanded && opp.recommendedActions.length > 0 && (
+                        <tr className="bg-zinc-50">
+                          <td colSpan={6} className="px-4 pb-4 pt-0">
+                            <div className="space-y-1.5">
+                              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Acciones recomendadas</p>
+                              {opp.recommendedActions.map((action, i) => (
+                                <p key={i} className="text-sm text-zinc-700 flex items-start gap-2">
+                                  <span className="text-zinc-400 mt-0.5">•</span>
+                                  <span>{action}</span>
+                                </p>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
