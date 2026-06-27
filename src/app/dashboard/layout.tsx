@@ -1,6 +1,7 @@
 import { UserButton } from '@clerk/nextjs';
 import Link from 'next/link';
 import PlanBadge from '@/components/PlanBadge';
+import { OrgAutoSync } from '@/components/OrgAutoSync';
 
 function DashboardIcon({ className }: { className?: string }) {
   return (
@@ -67,6 +68,7 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-black">
+      <OrgAutoSync />
       {/* Sidebar — desktop */}
       <aside className="hidden w-64 flex-col border-r border-zinc-200 bg-white p-6 md:flex dark:border-zinc-800 dark:bg-zinc-950">
         <Link href="/dashboard" className="mb-8 flex items-center gap-2.5">

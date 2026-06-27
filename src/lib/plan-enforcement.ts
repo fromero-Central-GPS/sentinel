@@ -52,9 +52,25 @@ async function resolveTenantId(): Promise<{ orgDbId: string; clerkOrgId: string 
 
 // ─── Fetch plan with limits ─────────────────────────────────────────────
 
+const FREE_PLAN_DEFAULTS: PlanLimits = {
+  planName: 'Free',
+  planSlug: 'free',
+  maxConversationsPerMonth: 100,
+  hasForense: true,
+  hasLiveOpp: true,
+  hasWonTrack: true,
+};
+
 export async function getTenantPlanLimits(): Promise<PlanLimits | null> {
   const tenant = await resolveTenantId();
-  if (!tenant) return null;
+
+  if (!tenant) {
+    // Org exists in Clerk but not yet synced to DB (webhook missed or not configured).
+    // Fail-open: grant free-plan access so authenticated users aren't locked out.
+    const { orgId } = await auth();
+    if (!orgId) return null;
+    return FREE_PLAN_DEFAULTS;
+  }
 
   // Check subscription
   const [sub] = await db

@@ -205,6 +205,35 @@ export default function ForensePage() {
   if (!data) return null;
 
   const { batchResult, _meta } = data;
+
+  if (!batchResult) {
+    return (
+      <div className="p-6 md:p-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Forense</h1>
+            <p className="text-sm text-zinc-500 mt-1">
+              Análisis de conversaciones perdidas — clasificación por causa raíz y recuperabilidad
+            </p>
+          </div>
+          <button
+            onClick={() => setMode('mock')}
+            className="px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-200 hover:bg-zinc-50"
+          >
+            Ver datos demo
+          </button>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center space-y-3">
+          <p className="font-medium text-zinc-700">No hay oportunidades perdidas en GHL</p>
+          {_meta.note && <p className="text-sm text-zinc-500">{_meta.note}</p>}
+          <p className="text-xs text-zinc-400">
+            Las oportunidades con estado &quot;lost&quot; en tu pipeline de GHL aparecerán aquí automáticamente.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const { summary } = batchResult;
 
   return (
