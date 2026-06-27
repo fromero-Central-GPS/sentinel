@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { BatchAnalysisResult, ConversationAnalysis, LossReasonCategory, RecoverabilityPriority } from '@/lib/analysis-engine';
 
 type ForenseResponse = {
-  batchResult: BatchAnalysisResult;
+  batchResult: BatchAnalysisResult | null;
   _meta: {
     mode: 'live' | 'mock';
     analyzedAt: string;
@@ -12,6 +12,7 @@ type ForenseResponse = {
     source?: string;
   };
   error?: string;
+  detail?: string;
 };
 
 const PRIORITY_CONFIG: Record<RecoverabilityPriority, { label: string; className: string }> = {
@@ -161,7 +162,7 @@ export default function ForensePage() {
     fetch(`/api/engines/forense?mode=${mode}`)
       .then((r) => r.json())
       .then((d) => {
-        if (d.error) throw new Error(d.error);
+        if (d.error) throw new Error(d.detail ? `${d.error} — ${d.detail}` : d.error);
         setData(d);
       })
       .catch((e) => setError(e.message))
@@ -178,25 +179,51 @@ export default function ForensePage() {
 
   if (error && !data) {
     const isNoCredentials = error.includes('not configured');
+    const isGhl401 = error.includes('401');
+    const isGhl403 = error.includes('403');
+    const isGhlError = error.includes('GHL opportunities error') || error.includes('Error al consultar GHL');
+
+    let title = 'Error al cargar análisis';
+    let hint = error;
+    if (isNoCredentials) {
+      title = 'Credenciales GHL no configuradas';
+      hint = 'Configura tu API Token y Location ID de GHL en Settings.';
+    } else if (isGhl401) {
+      title = 'Token GHL inválido o expirado (401)';
+      hint = 'El API Token guardado en Settings no es válido. Verifica que sea el token correcto del sub-account de GHL y vuelve a guardarlo.';
+    } else if (isGhl403) {
+      title = 'Sin permisos en GHL (403)';
+      hint = 'El token no tiene permisos de Oportunidades. Revisá los scopes del token en GHL.';
+    } else if (isGhlError) {
+      title = 'Error al conectar con GHL';
+      hint = `Detalle: ${error}`;
+    }
+
     return (
       <div className="p-8 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Forense</h1>
-          <button 
-             onClick={() => setMode(mode === 'live' ? 'mock' : 'live')}
-             className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 hover:bg-zinc-50"
+          <button
+            onClick={() => setMode(mode === 'live' ? 'mock' : 'live')}
+            className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 hover:bg-zinc-50"
           >
-             Modo: {mode}
+            Modo: {mode}
           </button>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center space-y-3">
-          <p className="font-semibold text-amber-800">
-            {isNoCredentials ? 'Credenciales GHL no configuradas' : 'Error al cargar análisis'}
-          </p>
-          <p className="text-sm text-amber-700">{isNoCredentials ? 'Configura tu API Token y Location ID de GHL en Settings.' : error}</p>
-          <a href="/settings" className="inline-block mt-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800">
-            Ir a Settings →
-          </a>
+          <p className="font-semibold text-amber-800">{title}</p>
+          <p className="text-sm text-amber-700 max-w-lg mx-auto">{hint}</p>
+          <div className="flex items-center justify-center gap-3 mt-2">
+            <a href="/settings" className="inline-block rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800">
+              Ir a Settings →
+            </a>
+            <button
+              onClick={() => { setError(null); setMode('mock'); }}
+              className="inline-block rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
+            >
+              Ver demo
+            </button>
+          </div>
         </div>
       </div>
     );
