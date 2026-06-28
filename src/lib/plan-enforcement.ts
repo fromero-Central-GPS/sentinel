@@ -162,26 +162,31 @@ export async function getCurrentUsage(): Promise<{ conversations: number; forens
   if (!tenant) return { conversations: 0, forense: 0, liveOpp: 0, wonTrack: 0 };
 
   const periodKey = currentPeriodKey();
-  const [record] = await db
-    .select()
-    .from(usageLog)
-    .where(
-      and(
-        eq(usageLog.organizationId, tenant.orgDbId),
-        eq(usageLog.periodKey, periodKey)
-      )
-    );
+  try {
+    const [record] = await db
+      .select()
+      .from(usageLog)
+      .where(
+        and(
+          eq(usageLog.organizationId, tenant.orgDbId),
+          eq(usageLog.periodKey, periodKey)
+        )
+      );
 
-  if (!record) {
+    if (!record) {
+      return { conversations: 0, forense: 0, liveOpp: 0, wonTrack: 0 };
+    }
+
+    return {
+      conversations: parseInt(record.conversationsAnalyzed, 10),
+      forense: parseInt(record.forenseRuns, 10),
+      liveOpp: parseInt(record.liveOppRuns, 10),
+      wonTrack: parseInt(record.wonTrackRuns, 10),
+    };
+  } catch {
+    // usage_log table not yet migrated — return zeros so enforcement doesn't block
     return { conversations: 0, forense: 0, liveOpp: 0, wonTrack: 0 };
   }
-
-  return {
-    conversations: parseInt(record.conversationsAnalyzed, 10),
-    forense: parseInt(record.forenseRuns, 10),
-    liveOpp: parseInt(record.liveOppRuns, 10),
-    wonTrack: parseInt(record.wonTrackRuns, 10),
-  };
 }
 
 export async function incrementUsage(motor: MotorName, conversationCount: number): Promise<void> {
@@ -191,15 +196,21 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
   const periodKey = currentPeriodKey();
 
   // Upsert: find or create usage record for this period
-  const [existing] = await db
-    .select({ id: usageLog.id, conversationsAnalyzed: usageLog.conversationsAnalyzed, forenseRuns: usageLog.forenseRuns, liveOppRuns: usageLog.liveOppRuns, wonTrackRuns: usageLog.wonTrackRuns })
-    .from(usageLog)
-    .where(
-      and(
-        eq(usageLog.organizationId, tenant.orgDbId),
-        eq(usageLog.periodKey, periodKey)
-      )
-    );
+  let existing: { id: string; conversationsAnalyzed: string; forenseRuns: string; liveOppRuns: string; wonTrackRuns: string } | undefined;
+  try {
+    [existing] = await db
+      .select({ id: usageLog.id, conversationsAnalyzed: usageLog.conversationsAnalyzed, forenseRuns: usageLog.forenseRuns, liveOppRuns: usageLog.liveOppRuns, wonTrackRuns: usageLog.wonTrackRuns })
+      .from(usageLog)
+      .where(
+        and(
+          eq(usageLog.organizationId, tenant.orgDbId),
+          eq(usageLog.periodKey, periodKey)
+        )
+      );
+  } catch {
+    // usage_log table not yet migrated — skip tracking silently
+    return;
+  }
 
   if (existing) {
     const currentConversations = parseInt(existing.conversationsAnalyzed, 10);
