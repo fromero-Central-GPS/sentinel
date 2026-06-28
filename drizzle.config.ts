@@ -10,6 +10,8 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    // Prefer DATABASE_DIRECT_URL (standard pg protocol) for migrations.
+    // Neon's pooled/serverless URL uses WebSockets and doesn't work with drizzle-kit.
+    url: (process.env.DATABASE_DIRECT_URL ?? process.env.DATABASE_URL)!,
   },
 });

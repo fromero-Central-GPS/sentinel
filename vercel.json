@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run db:migrate && NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard next build",
+  "buildCommand": "NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard next build",
   "installCommand": "npm ci",
   "devCommand": "npm run dev",
   "git": {
