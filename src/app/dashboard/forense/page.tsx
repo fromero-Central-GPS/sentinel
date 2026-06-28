@@ -295,6 +295,17 @@ export default function ForensePage() {
         </div>
       </div>
 
+      {_meta.mode === 'mock' && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
+          <p className="text-sm text-amber-800">
+            <span className="font-semibold">Modo demostración</span> — datos ficticios. Para ver tus conversaciones reales configura GHL y usa <span className="font-mono text-xs">GHL API</span>.
+          </p>
+          <a href="/settings" className="text-xs font-medium text-amber-700 underline whitespace-nowrap ml-4">
+            Ir a Settings →
+          </a>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
           ⚠️ {error}
