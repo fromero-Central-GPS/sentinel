@@ -69,7 +69,7 @@ export default function SettingsPage() {
 
     fetch('/api/billing/usage')
       .then((r) => r.json())
-      .then(setUsage)
+      .then((d) => { if (d?.usage) setUsage(d); })
       .catch(() => {});
 
     fetch('/api/billing/plans')

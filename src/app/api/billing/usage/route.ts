@@ -39,6 +39,15 @@ export async function GET() {
     });
   } catch (err: any) {
     console.error('[Usage API] Error:', err);
+    // If usage_log table doesn't exist yet (migration pending), return zero usage
+    if (err?.message?.includes('relation') || err?.code === '42P01') {
+      return NextResponse.json({
+        period: { label: new Date().toLocaleString('es-CL', { month: 'long', year: 'numeric' }) },
+        plan: { name: 'Free', slug: 'free' },
+        usage: { conversationsAnalyzed: 0, forenseRuns: 0, liveOppRuns: 0, wonTrackRuns: 0 },
+        limits: { maxConversationsPerMonth: 100, remaining: 100, usagePercent: 0 },
+      });
+    }
     return NextResponse.json({ error: 'Failed to fetch usage' }, { status: 500 });
   }
 }
