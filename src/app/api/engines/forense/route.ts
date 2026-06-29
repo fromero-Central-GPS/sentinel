@@ -97,6 +97,14 @@ async function fetchGhlLostOpportunities(token: string, locationId: string, limi
   return (data.opportunities ?? []) as GHLRawOpportunity[];
 }
 
+async function fetchGhlConversationIdByContact(token: string, locationId: string, contactId: string): Promise<string | null> {
+  const url = `${GHL_BASE}/conversations/search?locationId=${locationId}&contactId=${contactId}&limit=1`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION } });
+  if (!res.ok) return null;
+  const data = await res.json() as { conversations?: Array<{ id: string }> };
+  return data.conversations?.[0]?.id ?? null;
+}
+
 async function fetchGhlConversationMessages(token: string, conversationId: string): Promise<GHLMessage[]> {
   const url = `${GHL_BASE}/conversations/${conversationId}/messages?limit=50`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION } });
@@ -177,14 +185,28 @@ export async function GET(request: Request) {
       // Fetch conversations with messages for each opportunity
       const conversations: GHLConversationInput[] = await Promise.all(
         rawOpps.slice(0, 15).map(async (opp) => {
-          const messages = opp.conversationId
-            ? await fetchGhlConversationMessages(token, opp.conversationId)
+          // GHL /opportunities/search often omits conversationId — fall back to contact lookup
+          let conversationId = opp.conversationId ?? null;
+          if (!conversationId && opp.contact?.id) {
+            conversationId = await fetchGhlConversationIdByContact(token, locationId, opp.contact.id);
+          }
+
+          const messages = conversationId
+            ? await fetchGhlConversationMessages(token, conversationId)
             : [];
+
+          // Use real last-message timestamp; fall back to lastStageChangeAt to avoid 0-days bug
+          const lastMsgTimestamp = messages.length > 0
+            ? Math.max(...messages.map((m) => new Date(m.dateAdded).getTime()))
+            : opp.lastStageChangeAt
+              ? new Date(opp.lastStageChangeAt).getTime()
+              : Date.now();
+
           return {
-            id: opp.conversationId ?? opp.id,
+            id: conversationId ?? opp.id,
             contactId: opp.contact?.id ?? opp.id,
             contactName: opp.contact?.name ?? opp.name ?? 'Desconocido',
-            lastMessageDate: Date.now(),
+            lastMessageDate: lastMsgTimestamp,
             lastMessageType: 'TYPE_WHATSAPP',
             lastMessageDirection: 'inbound' as const,
             lastMessageBody: messages[messages.length - 1]?.body ?? '',
