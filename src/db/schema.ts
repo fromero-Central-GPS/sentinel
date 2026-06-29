@@ -50,11 +50,11 @@ export const appSettings = pgTable('app_settings', {
 
 export const plans = pgTable('plans', {
   id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),                    // e.g. "Free", "Pro", "Enterprise"
-  slug: text('slug').notNull().unique(),            // e.g. "free", "pro", "enterprise"
+  name: text('name').notNull(), // e.g. "Free", "Pro", "Enterprise"
+  slug: text('slug').notNull().unique(), // e.g. "free", "pro", "enterprise"
   description: text('description'),
-  priceMonthlyClp: text('price_monthly_clp'),       // e.g. "0", "49900", "149900"
-  features: text('features'),                       // JSON array of feature strings
+  priceMonthlyClp: text('price_monthly_clp'), // e.g. "0", "49900", "149900"
+  features: text('features'), // JSON array of feature strings
   maxTenantUsers: text('max_tenant_users').default('5'),
   maxConversationsPerMonth: text('max_conversations_per_month').default('1000'),
   hasForense: text('has_forense').default('true'),
@@ -89,7 +89,7 @@ export const usageLog = pgTable('usage_log', {
   organizationId: uuid('organization_id')
     .notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
-  periodKey: text('period_key').notNull(),        // e.g. "2026-06"
+  periodKey: text('period_key').notNull(), // e.g. "2026-06"
   conversationsAnalyzed: text('conversations_analyzed').notNull().default('0'),
   forenseRuns: text('forense_runs').notNull().default('0'),
   liveOppRuns: text('live_opp_runs').notNull().default('0'),

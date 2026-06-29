@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { BatchAnalysisResult, ConversationAnalysis, LossReasonCategory, RecoverabilityPriority } from '@/lib/analysis-engine';
+import type {
+  BatchAnalysisResult,
+  ConversationAnalysis,
+  LossReasonCategory,
+  RecoverabilityPriority,
+} from '@/lib/analysis-engine';
 
 type ForenseResponse = {
   batchResult: BatchAnalysisResult | null;
@@ -42,13 +47,25 @@ function formatCLP(value: number): string {
 function PriorityBadge({ priority }: { priority: RecoverabilityPriority }) {
   const cfg = PRIORITY_CONFIG[priority];
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${cfg.className}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${cfg.className}`}
+    >
       {cfg.label}
     </span>
   );
 }
 
-function SummaryCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+function SummaryCard({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: string;
+}) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-5">
       <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">{label}</p>
@@ -71,7 +88,9 @@ function ConversationRow({ item }: { item: ConversationAnalysis }) {
           <PriorityBadge priority={item.recoverability.priority} />
         </td>
         <td className="py-3 px-4 text-sm text-zinc-600">{item.recoverability.totalScore}/100</td>
-        <td className="py-3 px-4 text-sm text-zinc-700 font-mono">{formatCLP(item.opportunityValue)}</td>
+        <td className="py-3 px-4 text-sm text-zinc-700 font-mono">
+          {formatCLP(item.opportunityValue)}
+        </td>
         <td className="py-3 px-4 text-sm text-zinc-600">
           {REASON_LABELS[item.lossReason.primaryReason]}
         </td>
@@ -79,9 +98,7 @@ function ConversationRow({ item }: { item: ConversationAnalysis }) {
           {item.abandonment.daysSinceLastContact}d
         </td>
         <td className="py-3 px-4 text-sm text-zinc-500">{item.channel}</td>
-        <td className="py-3 px-4 text-center text-zinc-400 text-xs">
-          {expanded ? '▲' : '▼'}
-        </td>
+        <td className="py-3 px-4 text-center text-zinc-400 text-xs">{expanded ? '▲' : '▼'}</td>
       </tr>
       {expanded && (
         <tr className="bg-zinc-50">
@@ -89,7 +106,9 @@ function ConversationRow({ item }: { item: ConversationAnalysis }) {
             <div className="grid gap-4 sm:grid-cols-2 text-sm">
               <div>
                 <p className="font-medium text-zinc-700 mb-1">Etapa detectada</p>
-                <p className="text-zinc-600">{item.stageClassification.detectedStage.replace(/_/g, ' ')}</p>
+                <p className="text-zinc-600">
+                  {item.stageClassification.detectedStage.replace(/_/g, ' ')}
+                </p>
                 <p className="text-xs text-zinc-400 mt-0.5">
                   Confianza: {Math.round(item.stageClassification.confidence * 100)}%
                 </p>
@@ -110,7 +129,10 @@ function ConversationRow({ item }: { item: ConversationAnalysis }) {
                 {item.intentSignals.signals.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
                     {item.intentSignals.signals.map((s) => (
-                      <span key={s} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
+                      <span
+                        key={s}
+                        className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs"
+                      >
                         {s.replace(/_/g, ' ')}
                       </span>
                     ))}
@@ -137,10 +159,10 @@ function ConversationRow({ item }: { item: ConversationAnalysis }) {
                   {item.abandonment.direction === 'inbound_sin_respuesta'
                     ? '⚠️ Cliente esperando respuesta'
                     : item.abandonment.direction === 'outbound_sin_respuesta'
-                    ? 'Seguimiento sin respuesta del cliente'
-                    : item.abandonment.direction === 'mutuo_silencio'
-                    ? 'Silencio mutuo'
-                    : 'Conversación activa'}
+                      ? 'Seguimiento sin respuesta del cliente'
+                      : item.abandonment.direction === 'mutuo_silencio'
+                        ? 'Silencio mutuo'
+                        : 'Conversación activa'}
                 </p>
               </div>
             </div>
@@ -155,10 +177,9 @@ export default function ForensePage() {
   const [data, setData] = useState<ForenseResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'live'|'mock'>('live');
+  const [mode, setMode] = useState<'live' | 'mock'>('live');
 
   useEffect(() => {
-    setLoading(true);
     fetch(`/api/engines/forense?mode=${mode}`)
       .then((r) => r.json())
       .then((d) => {
@@ -181,7 +202,8 @@ export default function ForensePage() {
     const isNoCredentials = error.includes('not configured');
     const isGhl401 = error.includes('401');
     const isGhl403 = error.includes('403');
-    const isGhlError = error.includes('GHL opportunities error') || error.includes('Error al consultar GHL');
+    const isGhlError =
+      error.includes('GHL opportunities error') || error.includes('Error al consultar GHL');
 
     let title = 'Error al cargar análisis';
     let hint = error;
@@ -190,7 +212,8 @@ export default function ForensePage() {
       hint = 'Configura tu API Token y Location ID de GHL en Settings.';
     } else if (isGhl401) {
       title = 'Token GHL inválido o expirado (401)';
-      hint = 'El API Token guardado en Settings no es válido. Verifica que sea el token correcto del sub-account de GHL y vuelve a guardarlo.';
+      hint =
+        'El API Token guardado en Settings no es válido. Verifica que sea el token correcto del sub-account de GHL y vuelve a guardarlo.';
     } else if (isGhl403) {
       title = 'Sin permisos en GHL (403)';
       hint = 'El token no tiene permisos de Oportunidades. Revisá los scopes del token en GHL.';
@@ -214,11 +237,17 @@ export default function ForensePage() {
           <p className="font-semibold text-amber-800">{title}</p>
           <p className="text-sm text-amber-700 max-w-lg mx-auto">{hint}</p>
           <div className="flex items-center justify-center gap-3 mt-2">
-            <a href="/settings" className="inline-block rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800">
+            <a
+              href="/settings"
+              className="inline-block rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800"
+            >
               Ir a Settings →
             </a>
             <button
-              onClick={() => { setError(null); setMode('mock'); }}
+              onClick={() => {
+                setError(null);
+                setMode('mock');
+              }}
               className="inline-block rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
             >
               Ver demo
@@ -254,7 +283,8 @@ export default function ForensePage() {
           <p className="font-medium text-zinc-700">No hay oportunidades perdidas en GHL</p>
           {_meta.note && <p className="text-sm text-zinc-500">{_meta.note}</p>}
           <p className="text-xs text-zinc-400">
-            Las oportunidades con estado &quot;lost&quot; en tu pipeline de GHL aparecerán aquí automáticamente.
+            Las oportunidades con estado &quot;lost&quot; en tu pipeline de GHL aparecerán aquí
+            automáticamente.
           </p>
         </div>
       </div>
@@ -273,34 +303,43 @@ export default function ForensePage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-            <span className="text-sm text-zinc-500">Datos:</span>
-            <div className="flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
-              <button
-                onClick={() => setMode('live')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  mode === 'live' ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200' : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-              >
-                GHL API
-              </button>
-              <button
-                onClick={() => setMode('mock')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  mode === 'mock' ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200' : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-              >
-                Demo
-              </button>
-            </div>
+          <span className="text-sm text-zinc-500">Datos:</span>
+          <div className="flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+            <button
+              onClick={() => setMode('live')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                mode === 'live'
+                  ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              GHL API
+            </button>
+            <button
+              onClick={() => setMode('mock')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                mode === 'mock'
+                  ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Demo
+            </button>
+          </div>
         </div>
       </div>
 
       {_meta.mode === 'mock' && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
           <p className="text-sm text-amber-800">
-            <span className="font-semibold">Modo demostración</span> — datos ficticios. Para ver tus conversaciones reales configura GHL y usa <span className="font-mono text-xs">GHL API</span>.
+            <span className="font-semibold">Modo demostración</span> — datos ficticios. Para ver tus
+            conversaciones reales configura GHL y usa{' '}
+            <span className="font-mono text-xs">GHL API</span>.
           </p>
-          <a href="/settings" className="text-xs font-medium text-amber-700 underline whitespace-nowrap ml-4">
+          <a
+            href="/settings"
+            className="text-xs font-medium text-amber-700 underline whitespace-nowrap ml-4"
+          >
             Ir a Settings →
           </a>
         </div>
@@ -333,7 +372,12 @@ export default function ForensePage() {
         />
         <SummaryCard
           label="Principal causa pérdida"
-          value={summary.topLossReasons[0] ? (REASON_LABELS[summary.topLossReasons[0].reason] ?? summary.topLossReasons[0].reason) : '—'}
+          value={
+            summary.topLossReasons[0]
+              ? (REASON_LABELS[summary.topLossReasons[0].reason] ??
+                summary.topLossReasons[0].reason)
+              : '—'
+          }
           sub={summary.topLossReasons[0] ? `${summary.topLossReasons[0].count} casos` : 'Sin datos'}
         />
       </div>
@@ -344,13 +388,27 @@ export default function ForensePage() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-zinc-100 bg-zinc-50">
-                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Oportunidad</th>
-                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Recuperabilidad</th>
-                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Score</th>
-                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Valor</th>
-                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Causa Raíz</th>
-                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Días sin Contacto</th>
-                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Canal</th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Oportunidad
+                </th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Recuperabilidad
+                </th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Score
+                </th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Valor
+                </th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Causa Raíz
+                </th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Días sin Contacto
+                </th>
+                <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Canal
+                </th>
                 <th className="py-3 px-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider"></th>
               </tr>
             </thead>

@@ -36,9 +36,7 @@ export default function PlanBadge() {
   if (!info?.plan) return null;
 
   const isFree = info.plan.slug === 'free';
-  const badgeClass = isFree
-    ? 'bg-zinc-100 text-zinc-600'
-    : 'bg-blue-100 text-blue-700';
+  const badgeClass = isFree ? 'bg-zinc-100 text-zinc-600' : 'bg-blue-100 text-blue-700';
   const usagePct = info.limits?.usagePercent ?? 0;
 
   return (
@@ -49,13 +47,13 @@ export default function PlanBadge() {
         className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2.5 hover:bg-zinc-50 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${badgeClass}`}>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${badgeClass}`}
+          >
             {info.plan.name}
           </span>
         </div>
-        {isFree && (
-          <span className="text-xs font-medium text-blue-600">Upgrade →</span>
-        )}
+        {isFree && <span className="text-xs font-medium text-blue-600">Upgrade →</span>}
       </Link>
 
       {/* Usage bar */}
@@ -63,9 +61,7 @@ export default function PlanBadge() {
         <div className="px-1">
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="text-zinc-500">Conversaciones</span>
-            <span className="text-zinc-600 font-mono">
-              {usagePct}%
-            </span>
+            <span className="text-zinc-600 font-mono">{usagePct}%</span>
           </div>
           <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
             <div

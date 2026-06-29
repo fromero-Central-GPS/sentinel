@@ -9,7 +9,8 @@ function getKey(): Buffer {
   const keyB64 = process.env.ENCRYPTION_KEY;
   if (!keyB64) throw new Error('ENCRYPTION_KEY env var is required');
   const key = Buffer.from(keyB64, 'base64');
-  if (key.length !== KEY_LENGTH) throw new Error('ENCRYPTION_KEY must be 32 bytes (44 base64 chars)');
+  if (key.length !== KEY_LENGTH)
+    throw new Error('ENCRYPTION_KEY must be 32 bytes (44 base64 chars)');
   return key;
 }
 

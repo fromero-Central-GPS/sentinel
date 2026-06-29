@@ -4,14 +4,14 @@ Versión SaaS multitenant de Cassper Dashboard. Cada organización (tenant) cone
 
 ## Stack
 
-| Layer | Technology |
-|-------|------------|
+| Layer     | Technology                         |
+| --------- | ---------------------------------- |
 | Framework | Next.js 16 (App Router, Turbopack) |
-| Auth | Clerk (organizations) |
-| Database | Neon (Serverless Postgres) |
-| ORM | Drizzle ORM |
-| Styling | Tailwind CSS 4 |
-| Linting | ESLint 9 + Prettier |
+| Auth      | Clerk (organizations)              |
+| Database  | Neon (Serverless Postgres)         |
+| ORM       | Drizzle ORM                        |
+| Styling   | Tailwind CSS 4                     |
+| Linting   | ESLint 9 + Prettier                |
 
 ## Getting Started
 
@@ -48,28 +48,28 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start dev server (Turbopack) |
-| `npm run build` | Production build |
-| `npm run start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm run format` | Format with Prettier |
-| `npm run format:check` | Check formatting |
-| `npm run db:generate` | Generate Drizzle migrations |
-| `npm run db:push` | Push schema to Neon |
-| `npm run db:migrate` | Run Drizzle migrations |
-| `npm run db:studio` | Open Drizzle Studio |
+| Command                | Description                  |
+| ---------------------- | ---------------------------- |
+| `npm run dev`          | Start dev server (Turbopack) |
+| `npm run build`        | Production build             |
+| `npm run start`        | Start production server      |
+| `npm run lint`         | Run ESLint                   |
+| `npm run format`       | Format with Prettier         |
+| `npm run format:check` | Check formatting             |
+| `npm run db:generate`  | Generate Drizzle migrations  |
+| `npm run db:push`      | Push schema to Neon          |
+| `npm run db:migrate`   | Run Drizzle migrations       |
+| `npm run db:studio`    | Open Drizzle Studio          |
 
 ## Deployment
 
 ### Environments
 
-| Branch | Environment | Domain |
-|--------|-------------|--------|
-| `dev` | Preview | `sentinel-fleet-dev.vercel.app` |
-| `staging` | Preview | `sentinel-fleet-staging.vercel.app` |
-| `main` | Production | `sentinel-fleet.vercel.app` |
+| Branch    | Environment | Domain                              |
+| --------- | ----------- | ----------------------------------- |
+| `dev`     | Preview     | `sentinel-fleet-dev.vercel.app`     |
+| `staging` | Preview     | `sentinel-fleet-staging.vercel.app` |
+| `main`    | Production  | `sentinel-fleet.vercel.app`         |
 
 > **Note:** `sentinel*.vercel.app` (dev, staging, prod base) were taken. `sentinel-fleet*` was chosen as the alternative naming — all three variants were verified available as of 2026-06-26.
 

@@ -17,9 +17,7 @@
       },
       "enable_logical_replication": false,
       "maintenance_window": {
-        "weekdays": [
-          7
-        ],
+        "weekdays": [7],
         "start_time": "09:00",
         "end_time": "10:00"
       },
@@ -62,9 +60,7 @@
       },
       "enable_logical_replication": false,
       "maintenance_window": {
-        "weekdays": [
-          4
-        ],
+        "weekdays": [4],
         "start_time": "06:00",
         "end_time": "07:00"
       },
@@ -107,9 +103,7 @@
       },
       "enable_logical_replication": false,
       "maintenance_window": {
-        "weekdays": [
-          2
-        ],
+        "weekdays": [2],
         "start_time": "06:00",
         "end_time": "07:00"
       },
@@ -152,9 +146,7 @@
       },
       "enable_logical_replication": false,
       "maintenance_window": {
-        "weekdays": [
-          5
-        ],
+        "weekdays": [5],
         "start_time": "07:00",
         "end_time": "08:00"
       },
@@ -197,9 +189,7 @@
       },
       "enable_logical_replication": false,
       "maintenance_window": {
-        "weekdays": [
-          7
-        ],
+        "weekdays": [7],
         "start_time": "05:00",
         "end_time": "06:00"
       },
@@ -242,9 +232,7 @@
       },
       "enable_logical_replication": false,
       "maintenance_window": {
-        "weekdays": [
-          2
-        ],
+        "weekdays": [2],
         "start_time": "07:00",
         "end_time": "08:00"
       },

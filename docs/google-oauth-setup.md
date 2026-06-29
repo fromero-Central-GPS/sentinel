@@ -44,6 +44,7 @@ ocurre porque Clerk redirige a Google OAuth sin `client_id` — no hay Client ID
 ### 2. Configurar OAuth consent screen
 
 Si es la primera vez:
+
 1. Ir a https://console.cloud.google.com/apis/credentials/consent
 2. User Type: **External** (para cualquier usuario de Google)
 3. App name: `Sentinel`
@@ -78,6 +79,7 @@ Si es la primera vez:
 ## Workaround mientras se configura
 
 El sign-in con **email + password** funciona sin Google OAuth:
+
 1. Ir a https://sentinel.supersonics.cl/sign-up
 2. Crear cuenta con email + password
 3. Verificar el código enviado al email
@@ -98,6 +100,7 @@ El sign-in con **email + password** funciona sin Google OAuth:
 ### Error: "redirect_uri_mismatch"
 
 El redirect URI en Google Cloud Console no coincide con el de Clerk:
+
 - Google Cloud Console: `https://clerk.supersonics.cl/v1/oauth_callback/google`
 - Verificar que sea exactamente igual (sin `/` al final, sin http://)
 

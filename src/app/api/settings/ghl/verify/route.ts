@@ -30,5 +30,8 @@ export async function POST() {
   }
 
   const data = await res.json();
-  return NextResponse.json({ ok: true, locationName: data.location?.name ?? data.name ?? 'Unknown' });
+  return NextResponse.json({
+    ok: true,
+    locationName: data.location?.name ?? data.name ?? 'Unknown',
+  });
 }

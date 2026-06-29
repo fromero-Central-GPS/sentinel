@@ -15,7 +15,10 @@ export async function GET() {
     const maxConversations = limits.maxConversationsPerMonth;
     const usedConversations = usage.conversations;
     const remainingConversations = Math.max(0, maxConversations - usedConversations);
-    const usagePct = maxConversations > 0 ? Math.min(100, Math.round((usedConversations / maxConversations) * 100)) : 0;
+    const usagePct =
+      maxConversations > 0
+        ? Math.min(100, Math.round((usedConversations / maxConversations) * 100))
+        : 0;
 
     return NextResponse.json({
       period: {

@@ -14,7 +14,7 @@
 
 export interface GHLMessage {
   id: string;
-  direction: "inbound" | "outbound";
+  direction: 'inbound' | 'outbound';
   body: string;
   dateAdded: string;
   messageType: string;
@@ -60,84 +60,92 @@ export interface GHLOpportunity {
 
 export interface BusinessFeatures {
   // Contrato
-  planType: string;            // "Lite Anual", "Pro Anual", "Super", etc.
-  planCategory: "anual" | "mensual" | "desconocido";
+  planType: string; // "Lite Anual", "Pro Anual", "Super", etc.
+  planCategory: 'anual' | 'mensual' | 'desconocido';
   equipmentCount: number;
   contractValue: number;
   contractValueCLP: number;
 
   // Cliente
-  fleetSize: string;           // "1 vehículo", "2 a 9 vehículos", "10 a 49", "+50"
+  fleetSize: string; // "1 vehículo", "2 a 9 vehículos", "10 a 49", "+50"
   hasCompany: boolean;
-  industry: string;            // inferido del nombre de empresa
+  industry: string; // inferido del nombre de empresa
   clientTags: string[];
 
   // Adquisición
-  acquisitionChannel: string;  // "Social media", "Organic Search", "Paid Search", etc.
-  channelCategory: "whatsapp" | "organico" | "ads" | "directo" | "referido" | "otro";
-  leadScore: number;           // score de GHL al momento del cierre
+  acquisitionChannel: string; // "Social media", "Organic Search", "Paid Search", etc.
+  channelCategory: 'whatsapp' | 'organico' | 'ads' | 'directo' | 'referido' | 'otro';
+  leadScore: number; // score de GHL al momento del cierre
 
   // Proceso
-  timeToClose: number;         // días desde creación hasta won
-  closeSpeed: "instantaneo" | "rapido" | "normal" | "lento"; // ≤1d, ≤7d, ≤30d, >30d
+  timeToClose: number; // días desde creación hasta won
+  closeSpeed: 'instantaneo' | 'rapido' | 'normal' | 'lento'; // ≤1d, ≤7d, ≤30d, >30d
   stageAtCreation: string;
   stageAtWin: string;
 }
 
-const FIELD_PLAN = "GGjdMKQ53tRNd8oGLzGu";
-const FIELD_EQUIPOS = "yFxYOya6JEfZeA69R63D";
+const FIELD_PLAN = 'GGjdMKQ53tRNd8oGLzGu';
+const FIELD_EQUIPOS = 'yFxYOya6JEfZeA69R63D';
 
 export function extractBusinessFeatures(opp: GHLOpportunity): BusinessFeatures {
   // Plan type
-  const planType = opp.customFields
-    ?.find((f) => f.id === FIELD_PLAN)
-    ?.fieldValueString ?? "desconocido";
-  const planCategory: BusinessFeatures["planCategory"] =
-    planType.toLowerCase().includes("anual") ? "anual"
-    : planType.toLowerCase().includes("mensual") ? "mensual"
-    : "desconocido";
+  const planType =
+    opp.customFields?.find((f) => f.id === FIELD_PLAN)?.fieldValueString ?? 'desconocido';
+  const planCategory: BusinessFeatures['planCategory'] = planType.toLowerCase().includes('anual')
+    ? 'anual'
+    : planType.toLowerCase().includes('mensual')
+      ? 'mensual'
+      : 'desconocido';
 
   // Equipment count
-  const equipRaw = opp.customFields
-    ?.find((f) => f.id === FIELD_EQUIPOS)
-    ?.fieldValueNumber;
-  const equipmentCount = equipRaw ?? (Array.isArray(opp.customFields
-    ?.find((f) => f.id === FIELD_EQUIPOS)
-    ?.fieldValueNumber) ? 0 : 0);
+  const equipRaw = opp.customFields?.find((f) => f.id === FIELD_EQUIPOS)?.fieldValueNumber;
+  const equipmentCount =
+    equipRaw ??
+    (Array.isArray(opp.customFields?.find((f) => f.id === FIELD_EQUIPOS)?.fieldValueNumber)
+      ? 0
+      : 0);
 
   // Fleet size from tags
   const tags = opp.contact.tags ?? [];
-  let fleetSize = "desconocido";
+  let fleetSize = 'desconocido';
   for (const tag of tags) {
-    if (tag.includes("+50") || tag.includes("50")) fleetSize = "+50 vehículos";
-    else if (tag.includes("10 a 49") || tag.includes("10 a")) fleetSize = "10 a 49 vehículos";
-    else if (tag.includes("2 a 9") || tag.includes("2 a")) fleetSize = "2 a 9 vehículos";
-    else if (tag.includes("1 vehículo") || tag.includes("1 vehiculo")) fleetSize = "1 vehículo";
+    if (tag.includes('+50') || tag.includes('50')) fleetSize = '+50 vehículos';
+    else if (tag.includes('10 a 49') || tag.includes('10 a')) fleetSize = '10 a 49 vehículos';
+    else if (tag.includes('2 a 9') || tag.includes('2 a')) fleetSize = '2 a 9 vehículos';
+    else if (tag.includes('1 vehículo') || tag.includes('1 vehiculo')) fleetSize = '1 vehículo';
   }
 
   // Acquisition channel
   const firstAttr = opp.attributions?.find((a) => a.isFirst);
-  const channel = firstAttr?.utmSessionSource ?? firstAttr?.medium ?? "desconocido";
-  const channelCategory: BusinessFeatures["channelCategory"] =
-    channel.toLowerCase().includes("social media") || channel === "whatsapp" ? "whatsapp"
-    : channel.toLowerCase().includes("organic") ? "organico"
-    : channel.toLowerCase().includes("paid") || channel.toLowerCase().includes("adwords") ? "ads"
-    : channel.toLowerCase().includes("direct") ? "directo"
-    : channel.toLowerCase().includes("referral") || channel.toLowerCase().includes("crm") ? "referido"
-    : "otro";
+  const channel = firstAttr?.utmSessionSource ?? firstAttr?.medium ?? 'desconocido';
+  const channelCategory: BusinessFeatures['channelCategory'] =
+    channel.toLowerCase().includes('social media') || channel === 'whatsapp'
+      ? 'whatsapp'
+      : channel.toLowerCase().includes('organic')
+        ? 'organico'
+        : channel.toLowerCase().includes('paid') || channel.toLowerCase().includes('adwords')
+          ? 'ads'
+          : channel.toLowerCase().includes('direct')
+            ? 'directo'
+            : channel.toLowerCase().includes('referral') || channel.toLowerCase().includes('crm')
+              ? 'referido'
+              : 'otro';
 
   // Lead score
   const leadScore = opp.contact.score?.[0]?.score ?? 0;
 
   // Time to close
   const timeToClose = Math.floor(
-    (new Date(opp.updatedAt).getTime() - new Date(opp.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+    (new Date(opp.updatedAt).getTime() - new Date(opp.createdAt).getTime()) / (1000 * 60 * 60 * 24),
   );
-  const closeSpeed: BusinessFeatures["closeSpeed"] =
-    timeToClose <= 1 ? "instantaneo"
-    : timeToClose <= 7 ? "rapido"
-    : timeToClose <= 30 ? "normal"
-    : "lento";
+  const closeSpeed: BusinessFeatures['closeSpeed'] =
+    timeToClose <= 1
+      ? 'instantaneo'
+      : timeToClose <= 7
+        ? 'rapido'
+        : timeToClose <= 30
+          ? 'normal'
+          : 'lento';
 
   return {
     planType,
@@ -147,7 +155,7 @@ export function extractBusinessFeatures(opp: GHLOpportunity): BusinessFeatures {
     contractValueCLP: opp.monetaryValue,
     fleetSize,
     hasCompany: !!opp.contact.companyName,
-    industry: opp.contact.companyName ?? "particular",
+    industry: opp.contact.companyName ?? 'particular',
     clientTags: tags,
     acquisitionChannel: channel,
     channelCategory,
@@ -165,81 +173,103 @@ export interface CommunicationPatterns {
   totalMessages: number;
   inboundCount: number;
   outboundCount: number;
-  inboundRatio: number;           // inbound / total — >0.5 = client very engaged
+  inboundRatio: number; // inbound / total — >0.5 = client very engaged
 
   // Response times (outbound after inbound)
   avgResponseMinutes: number;
   medianResponseMinutes: number;
   maxResponseMinutes: number;
-  responseUnder30min: number;     // count
+  responseUnder30min: number; // count
   responseUnder1h: number;
   responseUnder4h: number;
 
   // Activity windows
-  activeDays: number;             // days between first and last message
-  messagesPerDay: number;         // message density
-  businessHoursRatio: number;     // 8am-7pm CLT / total
+  activeDays: number; // days between first and last message
+  messagesPerDay: number; // message density
+  businessHoursRatio: number; // 8am-7pm CLT / total
 
   // Content signals
   hasAttachments: boolean;
-  hasVoiceNotes: boolean;         // voice notes = high engagement
-  hasEmailThread: boolean;        // email + WhatsApp = multi-channel
-  paymentMentioned: boolean;      // payment proof or bank details shared
-  integrationMentioned: boolean;  // integration requirements discussed
+  hasVoiceNotes: boolean; // voice notes = high engagement
+  hasEmailThread: boolean; // email + WhatsApp = multi-channel
+  paymentMentioned: boolean; // payment proof or bank details shared
+  integrationMentioned: boolean; // integration requirements discussed
 
   // Engagement signals
   clientInitiatedConversation: boolean; // first message was inbound
-  clientSentDocuments: boolean;   // client sent files/attachments
-  positiveLanguageCount: number;  // "gracias", "perfecto", "ok", etc.
-  questionCount: number;          // client asked questions (engagement)
+  clientSentDocuments: boolean; // client sent files/attachments
+  positiveLanguageCount: number; // "gracias", "perfecto", "ok", etc.
+  questionCount: number; // client asked questions (engagement)
 
   // Key milestone detection
   milestones: Array<{
-    type: "first_contact" | "quote_sent" | "quote_accepted"
-        | "payment_made" | "registration_completed" | "installation_coordinated";
+    type:
+      | 'first_contact'
+      | 'quote_sent'
+      | 'quote_accepted'
+      | 'payment_made'
+      | 'registration_completed'
+      | 'installation_coordinated';
     date: string;
     detail: string;
   }>;
 }
 
-const POSITIVE_PATTERNS = /(?:gracias|perfecto|excelente|genial|buen[oí]simo|okey|dale|listo|de acuerdo)/i;
-const QUESTION_PATTERNS = /(?:c[oó]mo|cu[áa]ndo|cu[áa]nto|d[oó]nde|qui[ée]n|por qu[ée]|cu[aá]l|me (?:puedes|podr[íi]as|ayudas|indicas|confirmas))/i;
+const POSITIVE_PATTERNS =
+  /(?:gracias|perfecto|excelente|genial|buen[oí]simo|okey|dale|listo|de acuerdo)/i;
+const QUESTION_PATTERNS =
+  /(?:c[oó]mo|cu[áa]ndo|cu[áa]nto|d[oó]nde|qui[ée]n|por qu[ée]|cu[aá]l|me (?:puedes|podr[íi]as|ayudas|indicas|confirmas))/i;
 
 export function extractCommunicationPatterns(messages: GHLMessage[]): CommunicationPatterns {
   if (messages.length === 0) {
     return {
-      totalMessages: 0, inboundCount: 0, outboundCount: 0, inboundRatio: 0,
-      avgResponseMinutes: 0, medianResponseMinutes: 0, maxResponseMinutes: 0,
-      responseUnder30min: 0, responseUnder1h: 0, responseUnder4h: 0,
-      activeDays: 0, messagesPerDay: 0, businessHoursRatio: 0,
-      hasAttachments: false, hasVoiceNotes: false, hasEmailThread: false,
-      paymentMentioned: false, integrationMentioned: false,
-      clientInitiatedConversation: false, clientSentDocuments: false,
-      positiveLanguageCount: 0, questionCount: 0, milestones: [],
+      totalMessages: 0,
+      inboundCount: 0,
+      outboundCount: 0,
+      inboundRatio: 0,
+      avgResponseMinutes: 0,
+      medianResponseMinutes: 0,
+      maxResponseMinutes: 0,
+      responseUnder30min: 0,
+      responseUnder1h: 0,
+      responseUnder4h: 0,
+      activeDays: 0,
+      messagesPerDay: 0,
+      businessHoursRatio: 0,
+      hasAttachments: false,
+      hasVoiceNotes: false,
+      hasEmailThread: false,
+      paymentMentioned: false,
+      integrationMentioned: false,
+      clientInitiatedConversation: false,
+      clientSentDocuments: false,
+      positiveLanguageCount: 0,
+      questionCount: 0,
+      milestones: [],
     };
   }
 
   const sorted = [...messages].sort(
-    (a, b) => new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime()
+    (a, b) => new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime(),
   );
 
   // Basic counts
   // Only count actual message types (WhatsApp, Email, Call), filter system messages
-  const realMessages = sorted.filter((m) =>
-    !m.messageType.startsWith("TYPE_ACTIVITY") && m.body?.trim().length > 0
+  const realMessages = sorted.filter(
+    (m) => !m.messageType.startsWith('TYPE_ACTIVITY') && m.body?.trim().length > 0,
   );
-  const inbound = realMessages.filter((m) => m.direction === "inbound");
-  const outbound = realMessages.filter((m) => m.direction === "outbound");
+  const inbound = realMessages.filter((m) => m.direction === 'inbound');
+  const outbound = realMessages.filter((m) => m.direction === 'outbound');
   const totalMessages = realMessages.length;
 
   // Response times: for each inbound followed by outbound
   const responseTimes: number[] = [];
   for (const msg of realMessages) {
-    if (msg.direction === "outbound") continue;
+    if (msg.direction === 'outbound') continue;
     const inboundTime = new Date(msg.dateAdded).getTime();
     // Find next outbound after this inbound
     const nextOutbound = realMessages.find(
-      (m) => m.direction === "outbound" && new Date(m.dateAdded).getTime() > inboundTime
+      (m) => m.direction === 'outbound' && new Date(m.dateAdded).getTime() > inboundTime,
     );
     if (nextOutbound) {
       const respMinutes = (new Date(nextOutbound.dateAdded).getTime() - inboundTime) / (1000 * 60);
@@ -248,17 +278,20 @@ export function extractCommunicationPatterns(messages: GHLMessage[]): Communicat
   }
 
   const sortedRT = [...responseTimes].sort((a, b) => a - b);
-  const avgResponseMinutes = responseTimes.length > 0
-    ? Math.round(responseTimes.reduce((s, v) => s + v, 0) / responseTimes.length)
-    : 0;
-  const medianResponseMinutes = sortedRT.length > 0
-    ? Math.round(sortedRT[Math.floor(sortedRT.length / 2)])
-    : 0;
+  const avgResponseMinutes =
+    responseTimes.length > 0
+      ? Math.round(responseTimes.reduce((s, v) => s + v, 0) / responseTimes.length)
+      : 0;
+  const medianResponseMinutes =
+    sortedRT.length > 0 ? Math.round(sortedRT[Math.floor(sortedRT.length / 2)]) : 0;
 
   // Activity window
   const firstDate = new Date(sorted[0].dateAdded);
   const lastDate = new Date(sorted[sorted.length - 1].dateAdded);
-  const activeDays = Math.max(1, Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)));
+  const activeDays = Math.max(
+    1,
+    Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)),
+  );
 
   // Business hours (8am-7pm CLT = 12-23 UTC)
   const businessHoursMsgs = realMessages.filter((m) => {
@@ -269,59 +302,77 @@ export function extractCommunicationPatterns(messages: GHLMessage[]): Communicat
   // Content detection
   const hasAttachments = realMessages.some((m) => (m.attachments?.length ?? 0) > 0);
   const hasVoiceNotes = realMessages.some((m) =>
-    m.attachments?.some((a) => a.url?.endsWith(".ogg"))
+    m.attachments?.some((a) => a.url?.endsWith('.ogg')),
   );
-  const hasEmailThread = realMessages.some((m) => m.messageType === "TYPE_EMAIL");
+  const hasEmailThread = realMessages.some((m) => m.messageType === 'TYPE_EMAIL');
 
-  const allBodies = realMessages.map((m) => m.body).join(" ");
-  const paymentMentioned = /(?:transferencia|pago|deposito|banco|cuenta|comprobante|factura)/i.test(allBodies);
-  const integrationMentioned = /(?:integraci[oó]n|API|SimpleRoute|compatible|conecta)/i.test(allBodies);
+  const allBodies = realMessages.map((m) => m.body).join(' ');
+  const paymentMentioned = /(?:transferencia|pago|deposito|banco|cuenta|comprobante|factura)/i.test(
+    allBodies,
+  );
+  const integrationMentioned = /(?:integraci[oó]n|API|SimpleRoute|compatible|conecta)/i.test(
+    allBodies,
+  );
 
   // Client signals
-  const clientInitiatedConversation = sorted.length > 0 && sorted[0].direction === "inbound";
+  const clientInitiatedConversation = sorted.length > 0 && sorted[0].direction === 'inbound';
   const clientSentDocuments = inbound.some((m) => (m.attachments?.length ?? 0) > 0);
 
   // Language signals (only client messages)
-  const clientBodies = inbound.map((m) => m.body).join(" ");
-  const positiveLanguageCount = (clientBodies.match(new RegExp(POSITIVE_PATTERNS, "gi")) ?? []).length;
-  const questionCount = (clientBodies.match(new RegExp(QUESTION_PATTERNS, "gi")) ?? []).length;
+  const clientBodies = inbound.map((m) => m.body).join(' ');
+  const positiveLanguageCount = (clientBodies.match(new RegExp(POSITIVE_PATTERNS, 'gi')) ?? [])
+    .length;
+  const questionCount = (clientBodies.match(new RegExp(QUESTION_PATTERNS, 'gi')) ?? []).length;
 
   // Milestones
-  const milestones: CommunicationPatterns["milestones"] = [];
+  const milestones: CommunicationPatterns['milestones'] = [];
 
   // First contact
   if (sorted.length > 0) {
     milestones.push({
-      type: "first_contact",
+      type: 'first_contact',
       date: sorted[0].dateAdded,
-      detail: sorted[0].direction === "inbound" ? "Cliente inició contacto" : "Vendedor inició contacto",
+      detail:
+        sorted[0].direction === 'inbound' ? 'Cliente inició contacto' : 'Vendedor inició contacto',
     });
   }
 
   // Quote sent
-  const quoteMsg = realMessages.find((m) =>
-    m.direction === "outbound" && /(?:cotizaci[oó]n|presupuesto|enviado|adjunto)/i.test(m.body)
+  const quoteMsg = realMessages.find(
+    (m) =>
+      m.direction === 'outbound' && /(?:cotizaci[oó]n|presupuesto|enviado|adjunto)/i.test(m.body),
   );
   if (quoteMsg) {
-    milestones.push({ type: "quote_sent", date: quoteMsg.dateAdded, detail: "Cotización enviada" });
+    milestones.push({ type: 'quote_sent', date: quoteMsg.dateAdded, detail: 'Cotización enviada' });
   }
 
   // Payment
   if (paymentMentioned) {
-    const payMsg = realMessages.find((m) =>
-      /(?:transferencia|pago|deposito|comprobante)/i.test(m.body) && m.direction === "inbound"
+    const payMsg = realMessages.find(
+      (m) =>
+        /(?:transferencia|pago|deposito|comprobante)/i.test(m.body) && m.direction === 'inbound',
     );
     if (payMsg) {
-      milestones.push({ type: "payment_made", date: payMsg.dateAdded, detail: "Cliente realizó pago" });
+      milestones.push({
+        type: 'payment_made',
+        date: payMsg.dateAdded,
+        detail: 'Cliente realizó pago',
+      });
     }
   }
 
   // Installation coordinated
-  const installMsg = realMessages.find((m) =>
-    m.direction === "outbound" && /(?:instalaci[oó]n|domicilio|centro de atenci[oó]n|t[ée]cnico)/i.test(m.body)
+  const installMsg = realMessages.find(
+    (m) =>
+      m.direction === 'outbound' &&
+      /(?:instalaci[oó]n|domicilio|centro de atenci[oó]n|t[ée]cnico)/i.test(m.body),
   );
   if (installMsg) {
-    milestones.push({ type: "installation_coordinated", date: installMsg.dateAdded, detail: "Instalación coordinada" });
+    milestones.push({
+      type: 'installation_coordinated',
+      date: installMsg.dateAdded,
+      detail: 'Instalación coordinada',
+    });
   }
 
   return {
@@ -337,9 +388,10 @@ export function extractCommunicationPatterns(messages: GHLMessage[]): Communicat
     responseUnder4h: responseTimes.filter((t) => t <= 240).length,
     activeDays,
     messagesPerDay: Math.round((totalMessages / activeDays) * 10) / 10,
-    businessHoursRatio: realMessages.length > 0
-      ? Math.round((businessHoursMsgs.length / realMessages.length) * 100) / 100
-      : 0,
+    businessHoursRatio:
+      realMessages.length > 0
+        ? Math.round((businessHoursMsgs.length / realMessages.length) * 100) / 100
+        : 0,
     hasAttachments,
     hasVoiceNotes,
     hasEmailThread,
@@ -359,22 +411,22 @@ export interface SuccessThresholds {
   // Time-based
   avgTimeToClose: number;
   medianTimeToClose: number;
-  fastCloseThreshold: number;   // deals closing ≤N days are "fast"
+  fastCloseThreshold: number; // deals closing ≤N days are "fast"
 
   // Response-based
   avgResponseMinutes: number;
   medianResponseMinutes: number;
-  dangerResponseThreshold: number;  // if response > N minutes, risk increases
-  idealResponseThreshold: number;   // target response time
+  dangerResponseThreshold: number; // if response > N minutes, risk increases
+  idealResponseThreshold: number; // target response time
 
   // Engagement-based
   avgMessagesPerDeal: number;
   avgInboundRatio: number;
-  lowEngagementThreshold: number;   // if inbound ratio < N, risk
+  lowEngagementThreshold: number; // if inbound ratio < N, risk
 
   // Channel-based
   topChannel: string;
-  channelWinRates: Record<string, number>;  // channel → win count
+  channelWinRates: Record<string, number>; // channel → win count
 
   // Plan-based
   topPlan: string;
@@ -383,7 +435,7 @@ export interface SuccessThresholds {
   // Value-based
   avgContractValue: number;
   medianContractValue: number;
-  valueByFleetSize: Record<string, number>;  // fleet → avg value
+  valueByFleetSize: Record<string, number>; // fleet → avg value
 
   // Sample info
   sampleSize: number;
@@ -392,20 +444,30 @@ export interface SuccessThresholds {
 
 export function computeSuccessThresholds(
   features: BusinessFeatures[],
-  patterns: CommunicationPatterns[]
+  patterns: CommunicationPatterns[],
 ): SuccessThresholds {
   const n = features.length;
   if (n === 0) {
     return {
-      avgTimeToClose: 0, medianTimeToClose: 0, fastCloseThreshold: 0,
-      avgResponseMinutes: 0, medianResponseMinutes: 0,
-      dangerResponseThreshold: 0, idealResponseThreshold: 0,
-      avgMessagesPerDeal: 0, avgInboundRatio: 0, lowEngagementThreshold: 0,
-      topChannel: "", channelWinRates: {},
-      topPlan: "", planDistribution: {},
-      avgContractValue: 0, medianContractValue: 0,
+      avgTimeToClose: 0,
+      medianTimeToClose: 0,
+      fastCloseThreshold: 0,
+      avgResponseMinutes: 0,
+      medianResponseMinutes: 0,
+      dangerResponseThreshold: 0,
+      idealResponseThreshold: 0,
+      avgMessagesPerDeal: 0,
+      avgInboundRatio: 0,
+      lowEngagementThreshold: 0,
+      topChannel: '',
+      channelWinRates: {},
+      topPlan: '',
+      planDistribution: {},
+      avgContractValue: 0,
+      medianContractValue: 0,
       valueByFleetSize: {},
-      sampleSize: 0, analyzedAt: new Date().toISOString(),
+      sampleSize: 0,
+      analyzedAt: new Date().toISOString(),
     };
   }
 
@@ -419,9 +481,10 @@ export function computeSuccessThresholds(
     // We store median/avg per deal in the pattern; aggregate across deals
     return p.avgResponseMinutes > 0 ? [p.avgResponseMinutes] : [];
   });
-  const avgResponseMinutes = allResponseTimes.length > 0
-    ? Math.round(allResponseTimes.reduce((s, v) => s + v, 0) / allResponseTimes.length)
-    : 0;
+  const avgResponseMinutes =
+    allResponseTimes.length > 0
+      ? Math.round(allResponseTimes.reduce((s, v) => s + v, 0) / allResponseTimes.length)
+      : 0;
 
   // Danger threshold: 2x the median response time
   const dangerResponseThreshold = avgResponseMinutes > 0 ? avgResponseMinutes * 2 : 120;
@@ -430,23 +493,22 @@ export function computeSuccessThresholds(
 
   // Engagement
   const avgMessagesPerDeal = Math.round(patterns.reduce((s, p) => s + p.totalMessages, 0) / n);
-  const avgInboundRatio = Math.round(
-    (patterns.reduce((s, p) => s + p.inboundRatio, 0) / n) * 100
-  ) / 100;
+  const avgInboundRatio =
+    Math.round((patterns.reduce((s, p) => s + p.inboundRatio, 0) / n) * 100) / 100;
 
   // Channel distribution
   const channelCounts: Record<string, number> = {};
   for (const f of features) {
     channelCounts[f.channelCategory] = (channelCounts[f.channelCategory] ?? 0) + 1;
   }
-  const topChannel = Object.entries(channelCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  const topChannel = Object.entries(channelCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 
   // Plan distribution
   const planCounts: Record<string, number> = {};
   for (const f of features) {
     planCounts[f.planType] = (planCounts[f.planType] ?? 0) + 1;
   }
-  const topPlan = Object.entries(planCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  const topPlan = Object.entries(planCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 
   // Contract value
   const values = features.map((f) => f.contractValue).sort((a, b) => a - b);
@@ -505,38 +567,37 @@ export interface WonTrackOutput {
   thresholds: SuccessThresholds;
 }
 
-export function analyzeWonDeal(
-  opp: GHLOpportunity,
-  messages: GHLMessage[]
-): WonDealAnalysis {
+export function analyzeWonDeal(opp: GHLOpportunity, messages: GHLMessage[]): WonDealAnalysis {
   const features = extractBusinessFeatures(opp);
   const patterns = extractCommunicationPatterns(messages);
 
   // Generate winning formula
   const formula: string[] = [];
 
-  if (features.closeSpeed === "instantaneo" || features.closeSpeed === "rapido") {
+  if (features.closeSpeed === 'instantaneo' || features.closeSpeed === 'rapido') {
     formula.push(`Cierre ${features.closeSpeed} (${features.timeToClose}d)`);
   }
   if (patterns.avgResponseMinutes <= 60) {
     formula.push(`Respuesta rápida (promedio ${patterns.avgResponseMinutes}min)`);
   }
   if (patterns.inboundRatio >= 0.4) {
-    formula.push(`Alto engagement del cliente (${Math.round(patterns.inboundRatio * 100)}% inbound)`);
+    formula.push(
+      `Alto engagement del cliente (${Math.round(patterns.inboundRatio * 100)}% inbound)`,
+    );
   }
   if (patterns.hasVoiceNotes) {
-    formula.push("Cliente envió notas de voz (alto compromiso)");
+    formula.push('Cliente envió notas de voz (alto compromiso)');
   }
   if (patterns.hasEmailThread) {
-    formula.push("Comunicación multi-canal (WhatsApp + Email)");
+    formula.push('Comunicación multi-canal (WhatsApp + Email)');
   }
   if (patterns.paymentMentioned && patterns.clientSentDocuments) {
-    formula.push("Cliente proactivo con documentos y pago");
+    formula.push('Cliente proactivo con documentos y pago');
   }
-  if (features.channelCategory === "whatsapp") {
-    formula.push("Canal WhatsApp (respuesta rápida)");
+  if (features.channelCategory === 'whatsapp') {
+    formula.push('Canal WhatsApp (respuesta rápida)');
   }
-  if (features.planCategory === "anual") {
+  if (features.planCategory === 'anual') {
     formula.push(`Plan anual (${features.planType}) — mayor retención`);
   }
   if (features.equipmentCount >= 3) {
@@ -549,7 +610,7 @@ export function analyzeWonDeal(
     formula.push(`Lenguaje positivo (${patterns.positiveLanguageCount} expresiones)`);
   }
   if (patterns.integrationMentioned) {
-    formula.push("Requerimiento de integración satisfecho");
+    formula.push('Requerimiento de integración satisfecho');
   }
   if (features.leadScore >= 20) {
     formula.push(`Lead score alto (${features.leadScore}) al entrar`);
@@ -560,14 +621,14 @@ export function analyzeWonDeal(
     contactName: opp.contact.name,
     features,
     patterns,
-    winningFormula: formula.length > 0 ? formula : ["Análisis insuficiente — revisar manualmente"],
+    winningFormula: formula.length > 0 ? formula : ['Análisis insuficiente — revisar manualmente'],
   };
 }
 
 export function generateWonTrackOutput(
   deals: WonDealAnalysis[],
   allFeatures: BusinessFeatures[],
-  allPatterns: CommunicationPatterns[]
+  allPatterns: CommunicationPatterns[],
 ): WonTrackOutput {
   const thresholds = computeSuccessThresholds(allFeatures, allPatterns);
 
@@ -586,15 +647,15 @@ export function generateWonTrackOutput(
  */
 export function formatWonTrackMarkdown(output: WonTrackOutput): string {
   const { thresholds, deals } = output;
-  const fmt = (n: number) => n.toLocaleString("es-CL", { maximumFractionDigits: 0 });
+  const fmt = (n: number) => n.toLocaleString('es-CL', { maximumFractionDigits: 0 });
 
   const lines: string[] = [
     `# 🏆 Won Track — Análisis de Ventas Exitosas`,
-    "",
+    '',
     `> ${output.sampleSize} deals ganados analizados — **$${fmt(output.totalWonValue)} CLP** en revenue.`,
-    "",
+    '',
     `## 📊 Umbrales de Éxito (→ Live Opp)`,
-    "",
+    '',
     `| Métrica | Valor | Implicancia para Live Opp |`,
     `|---|---|---|`,
     `| Tiempo promedio cierre | ${thresholds.avgTimeToClose}d | Alertar si deal abierto >${thresholds.avgTimeToClose * 2}d sin avance |`,
@@ -604,9 +665,9 @@ export function formatWonTrackMarkdown(output: WonTrackOutput): string {
     `| Canal top | ${thresholds.topChannel} (${thresholds.channelWinRates[thresholds.topChannel] ?? 0} deals) | Priorizar seguimiento en este canal |`,
     `| Plan más vendido | ${thresholds.topPlan} (${thresholds.planDistribution[thresholds.topPlan] ?? 0} deals) | Sugerir este plan en cotizaciones |`,
     `| Valor promedio contrato | $${fmt(thresholds.avgContractValue)} CLP | Benchmark para calificar leads |`,
-    "",
+    '',
     `## 📋 Top Deals Analizados`,
-    "",
+    '',
     `| # | Contacto | Valor | Plan | Equipos | Canal | Cierre | Fórmula de éxito |`,
     `|---|---|---|---|---|---|---|---|`,
   ];
@@ -614,15 +675,15 @@ export function formatWonTrackMarkdown(output: WonTrackOutput): string {
   deals.slice(0, 20).forEach((d, i) => {
     const f = d.features;
     const p = d.patterns;
-    const formula = d.winningFormula.slice(0, 3).join(" · ");
+    const formula = d.winningFormula.slice(0, 3).join(' · ');
     lines.push(
-      `| ${i + 1} | **${d.contactName}** | $${fmt(f.contractValue)} | ${f.planType} | ${f.equipmentCount} | ${f.channelCategory} | ${f.timeToClose}d | ${formula} |`
+      `| ${i + 1} | **${d.contactName}** | $${fmt(f.contractValue)} | ${f.planType} | ${f.equipmentCount} | ${f.channelCategory} | ${f.timeToClose}d | ${formula} |`,
     );
   });
 
-  lines.push("");
+  lines.push('');
   lines.push(`## 💡 Fórmulas de Éxito Más Comunes`);
-  lines.push("");
+  lines.push('');
 
   // Aggregate winning formulas
   const formulaCounts = new Map<string, number>();
@@ -640,9 +701,11 @@ export function formatWonTrackMarkdown(output: WonTrackOutput): string {
     lines.push(`- **${formula}** — presente en ${count} deals (${pct}%)`);
   }
 
-  lines.push("");
+  lines.push('');
   lines.push(`---`);
-  lines.push(`*Won Track generado el ${new Date().toISOString()} — alimenta Live Opp con umbrales de éxito*`);
+  lines.push(
+    `*Won Track generado el ${new Date().toISOString()} — alimenta Live Opp con umbrales de éxito*`,
+  );
 
-  return lines.join("\n");
+  return lines.join('\n');
 }

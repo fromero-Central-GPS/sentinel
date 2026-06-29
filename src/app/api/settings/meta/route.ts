@@ -20,7 +20,8 @@ export async function GET() {
     });
   }
 
-  const domain = process.env.NEXT_PUBLIC_APP_URL ?? process.env.VERCEL_URL ?? 'https://your-domain.com';
+  const domain =
+    process.env.NEXT_PUBLIC_APP_URL ?? process.env.VERCEL_URL ?? 'https://your-domain.com';
   const webhookUrl = `${domain}/api/webhooks/meta/whatsapp`;
 
   return NextResponse.json({

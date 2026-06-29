@@ -90,15 +90,15 @@ export async function POST(request: Request) {
   if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { planSlug } = await request.json() as { planSlug?: string };
+    const { planSlug } = (await request.json()) as { planSlug?: string };
     if (!planSlug || !['free', 'pro', 'enterprise'].includes(planSlug)) {
-      return NextResponse.json({ error: 'Invalid plan slug. Use: free, pro, enterprise' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Invalid plan slug. Use: free, pro, enterprise' },
+        { status: 400 },
+      );
     }
 
-    const [targetPlan] = await db
-      .select()
-      .from(plans)
-      .where(eq(plans.slug, planSlug));
+    const [targetPlan] = await db.select().from(plans).where(eq(plans.slug, planSlug));
 
     if (!targetPlan) {
       return NextResponse.json({ error: `Plan "${planSlug}" not found` }, { status: 404 });

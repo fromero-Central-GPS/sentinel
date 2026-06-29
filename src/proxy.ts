@@ -7,7 +7,8 @@ export default clerkMiddleware(async (auth, req) => {
 
   // Public routes — allow through
   const pathname = req.nextUrl.pathname;
-  const isPublicRoute = pathname === '/' ||
+  const isPublicRoute =
+    pathname === '/' ||
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
     pathname.startsWith('/pricing') ||

@@ -158,22 +158,72 @@ export interface BatchAnalysisResult {
 
 const PURCHASE_INTENT_PATTERNS: Array<{ pattern: RegExp; weight: number; category: string }> = [
   // Alta intención (peso 20-25)
-  { pattern: /(?:me interesa|me interesaría|estoy interesad[oa]|quiero comprar|quiero contratar|compramos|contratamos)/i, weight: 25, category: 'interes_directo' },
-  { pattern: /(?:cotizaci[oó]n|cotizar|cu[áa]nto (?:cuesta|vale|sale)|precio|valor|cuota)/i, weight: 20, category: 'consulta_precio' },
-  { pattern: /(?:demo|demostraci[oó]n|probar|prueba|ver (?:la |el )?plataforma|c[oó]mo funciona)/i, weight: 22, category: 'solicitud_demo' },
-  { pattern: /(?:urgente|lo antes posible|para (?:hoy|ma[ñn]ana|esta semana)|necesito|necesitamos)/i, weight: 18, category: 'urgencia' },
+  {
+    pattern:
+      /(?:me interesa|me interesaría|estoy interesad[oa]|quiero comprar|quiero contratar|compramos|contratamos)/i,
+    weight: 25,
+    category: 'interes_directo',
+  },
+  {
+    pattern: /(?:cotizaci[oó]n|cotizar|cu[áa]nto (?:cuesta|vale|sale)|precio|valor|cuota)/i,
+    weight: 20,
+    category: 'consulta_precio',
+  },
+  {
+    pattern: /(?:demo|demostraci[oó]n|probar|prueba|ver (?:la |el )?plataforma|c[oó]mo funciona)/i,
+    weight: 22,
+    category: 'solicitud_demo',
+  },
+  {
+    pattern:
+      /(?:urgente|lo antes posible|para (?:hoy|ma[ñn]ana|esta semana)|necesito|necesitamos)/i,
+    weight: 18,
+    category: 'urgencia',
+  },
 
   // Intención media (peso 10-15)
-  { pattern: /(?:informaci[oó]n|m[áa]s info|detalles|caracter[íi]sticas|especificaciones)/i, weight: 12, category: 'solicitud_info' },
-  { pattern: /(?:comparar|comparativa|diferencia|vs\.?|versus|alternativa)/i, weight: 10, category: 'comparacion' },
-  { pattern: /(?:flota|veh[íi]culos|camion(?:es|etas)|autos|buses|maquinaria)/i, weight: 14, category: 'mencion_flota' },
-  { pattern: /(?:instalaci[oó]n|instalar|cu[áa]ndo (?:pueden|podr[íi]an)|tiempo de instalaci)/i, weight: 15, category: 'consulta_instalacion' },
+  {
+    pattern: /(?:informaci[oó]n|m[áa]s info|detalles|caracter[íi]sticas|especificaciones)/i,
+    weight: 12,
+    category: 'solicitud_info',
+  },
+  {
+    pattern: /(?:comparar|comparativa|diferencia|vs\.?|versus|alternativa)/i,
+    weight: 10,
+    category: 'comparacion',
+  },
+  {
+    pattern: /(?:flota|veh[íi]culos|camion(?:es|etas)|autos|buses|maquinaria)/i,
+    weight: 14,
+    category: 'mencion_flota',
+  },
+  {
+    pattern: /(?:instalaci[oó]n|instalar|cu[áa]ndo (?:pueden|podr[íi]an)|tiempo de instalaci)/i,
+    weight: 15,
+    category: 'consulta_instalacion',
+  },
 
   // Señales débiles (peso 5-8)
-  { pattern: /(?:gps|rastreo|monitoreo|localizaci[oó]n|tracking|seguimiento)/i, weight: 8, category: 'mencion_gps' },
-  { pattern: /(?:gracias|ok|okey|dale|bueno|perfecto|de acuerdo)/i, weight: 5, category: 'engagement_positivo' },
-  { pattern: /(?:env[ií]a(?:me|n)|mand[aá](?:me|n)|reenv[ií]a)/i, weight: 12, category: 'solicitud_envio' },
-  { pattern: /(?:ll[aá]ma(?:me|n)|comun[íi]ca(?:te|rse)|agendar|coordinar|reuni[oó]n)/i, weight: 16, category: 'solicitud_contacto' },
+  {
+    pattern: /(?:gps|rastreo|monitoreo|localizaci[oó]n|tracking|seguimiento)/i,
+    weight: 8,
+    category: 'mencion_gps',
+  },
+  {
+    pattern: /(?:gracias|ok|okey|dale|bueno|perfecto|de acuerdo)/i,
+    weight: 5,
+    category: 'engagement_positivo',
+  },
+  {
+    pattern: /(?:env[ií]a(?:me|n)|mand[aá](?:me|n)|reenv[ií]a)/i,
+    weight: 12,
+    category: 'solicitud_envio',
+  },
+  {
+    pattern: /(?:ll[aá]ma(?:me|n)|comun[íi]ca(?:te|rse)|agendar|coordinar|reuni[oó]n)/i,
+    weight: 16,
+    category: 'solicitud_contacto',
+  },
 ];
 
 export function detectPurchaseIntent(messages: GHLMessage[]): IntentSignals {
@@ -192,9 +242,7 @@ export function detectPurchaseIntent(messages: GHLMessage[]): IntentSignals {
   }
 
   // Bonus por inbound reciente con señales
-  const recentInbound = messages.filter(
-    (m) => m.direction === 'inbound'
-  );
+  const recentInbound = messages.filter((m) => m.direction === 'inbound');
   if (recentInbound.length > 0 && signals.length >= 2) {
     totalScore += 10;
   }
@@ -270,10 +318,7 @@ const STAGE_PATTERNS: Array<{ stage: FunnelStage; patterns: RegExp[]; weight: nu
   },
 ];
 
-export function classifyFunnelStage(
-  messages: GHLMessage[],
-  ghlStage: string
-): StageClassification {
+export function classifyFunnelStage(messages: GHLMessage[], ghlStage: string): StageClassification {
   const allText = messages.map((m) => m.body).join(' ');
   const scores: Array<{ stage: FunnelStage; score: number; evidence: string[] }> = [];
 
@@ -294,9 +339,8 @@ export function classifyFunnelStage(
   scores.sort((a, b) => b.score - a.score);
 
   const top = scores[0];
-  const confidence = top.score > 0
-    ? Math.min(1, top.score / (scores[1]?.score + top.score || top.score))
-    : 0.3;
+  const confidence =
+    top.score > 0 ? Math.min(1, top.score / (scores[1]?.score + top.score || top.score)) : 0.3;
 
   return {
     detectedStage: top.score > 0 ? top.stage : 'consulta_inicial',
@@ -313,12 +357,10 @@ const URGENT_THRESHOLD_HOURS = 4; // horas sin respuesta para alerta temprana
 
 export function detectAbandonment(
   messages: GHLMessage[],
-  lastMessageDate: number
+  lastMessageDate: number,
 ): AbandonmentDiagnosis {
   const now = Date.now();
-  const daysSinceLastContact = Math.floor(
-    (now - lastMessageDate) / (1000 * 60 * 60 * 24)
-  );
+  const daysSinceLastContact = Math.floor((now - lastMessageDate) / (1000 * 60 * 60 * 24));
 
   // Encontrar último mensaje inbound y outbound
   let lastInboundDate: string | null = null;
@@ -381,7 +423,8 @@ const LOSS_REASON_PATTERNS: Array<{
       /(?:m[áa]s barato|econ[óo]mico|costoso|precio elevado|no (?:puedo|podemos) pagar)/i,
       /(?:hay algo m[áa]s barato|tienen planes m[áa]s econ[óo]micos)/i,
     ],
-    suggestion: 'Ofrecer plan alternativo con menor precio o plan escalonado. Destacar ROI y ahorro a largo plazo.',
+    suggestion:
+      'Ofrecer plan alternativo con menor precio o plan escalonado. Destacar ROI y ahorro a largo plazo.',
   },
   {
     reason: 'competidor',
@@ -390,7 +433,8 @@ const LOSS_REASON_PATTERNS: Array<{
       /(?:competencia|competidor|(?:wialon|satelital|gurtam|tracking chile|m2m|entel|claro|movistar))/i,
       /(?:me ofrecieron|me cotizaron en otro lado|encontr[eé] (?:algo|uno) m[áa]s)/i,
     ],
-    suggestion: 'Comparar ventajas diferenciales. Enfocar en servicio, soporte local, funcionalidades únicas.',
+    suggestion:
+      'Comparar ventajas diferenciales. Enfocar en servicio, soporte local, funcionalidades únicas.',
   },
   {
     reason: 'producto_no_disponible',
@@ -399,7 +443,8 @@ const LOSS_REASON_PATTERNS: Array<{
       /(?:no (?:sirve|funciona|aplica|corre) para|incompatible|no compatible)/i,
       /(?:stock|disponible|agotado|sin stock|no tienen en este momento)/i,
     ],
-    suggestion: 'Verificar disponibilidad futura. Ofrecer producto alternativo o funcionalidad equivalente.',
+    suggestion:
+      'Verificar disponibilidad futura. Ofrecer producto alternativo o funcionalidad equivalente.',
   },
   {
     reason: 'falta_informacion',
@@ -408,7 +453,8 @@ const LOSS_REASON_PATTERNS: Array<{
       /(?:c[oó]mo (?:funciona|se usa|se instala)|no me qued[oó] claro)/i,
       /(?:podr[íi]as explicar|me puedes contar m[áa]s|no conozco (?:bien|mucho))/i,
     ],
-    suggestion: 'Enviar material informativo, video demo, caso de éxito relevante. Agendar llamada explicativa.',
+    suggestion:
+      'Enviar material informativo, video demo, caso de éxito relevante. Agendar llamada explicativa.',
   },
   {
     reason: 'sin_seguimiento',
@@ -417,7 +463,8 @@ const LOSS_REASON_PATTERNS: Array<{
       /(?:se (?:perdi[oó]|cort[oó]) (?:el |la |)contacto|dejaron de responder|no supe m[áa]s)/i,
       /(?:sigo esperando|(?:qued[eé]|quedamos) (?:a la espera|pendiente|en veremos))/i,
     ],
-    suggestion: 'Contactar inmediatamente con disculpas. Priorizar seguimiento humano, no automatizado.',
+    suggestion:
+      'Contactar inmediatamente con disculpas. Priorizar seguimiento humano, no automatizado.',
   },
   {
     reason: 'proceso_complejo',
@@ -426,7 +473,8 @@ const LOSS_REASON_PATTERNS: Array<{
       /(?:no (?:es|era|fue) (?:simple|f[áa]cil|r[áa]pido)|demasiados pasos|muchas vueltas)/i,
       /(?:proceso (?:largo|complicado|tedioso)|instalaci[oó]n muy compleja)/i,
     ],
-    suggestion: 'Simplificar onboarding. Ofrecer instalación express o setup guiado. Reducir fricción.',
+    suggestion:
+      'Simplificar onboarding. Ofrecer instalación express o setup guiado. Reducir fricción.',
   },
   {
     reason: 'cliente_explorando',
@@ -442,10 +490,15 @@ const LOSS_REASON_PATTERNS: Array<{
 export function diagnoseLossReason(
   messages: GHLMessage[],
   opportunityStatus: string,
-  abandonment: AbandonmentDiagnosis
+  abandonment: AbandonmentDiagnosis,
 ): LossReasonDiagnosis {
   const allText = messages.map((m) => m.body).join(' ');
-  const scores: Array<{ reason: LossReasonCategory; score: number; evidence: string[]; suggestion: string }> = [];
+  const scores: Array<{
+    reason: LossReasonCategory;
+    score: number;
+    evidence: string[];
+    suggestion: string;
+  }> = [];
 
   for (const { reason, patterns, suggestion } of LOSS_REASON_PATTERNS) {
     const evidence: string[] = [];
@@ -467,8 +520,11 @@ export function diagnoseLossReason(
         primaryReason: 'sin_seguimiento',
         secondaryReasons: [],
         confidence: 0.6,
-        evidence: [`Cliente escribió y no hubo respuesta en ${abandonment.daysSinceLastContact} días`],
-        suggestedAction: 'Contactar inmediatamente. El cliente mostró interés activo y no fue atendido.',
+        evidence: [
+          `Cliente escribió y no hubo respuesta en ${abandonment.daysSinceLastContact} días`,
+        ],
+        suggestedAction:
+          'Contactar inmediatamente. El cliente mostró interés activo y no fue atendido.',
       };
     }
     if (abandonment.isAbandoned && abandonment.daysSinceLastContact > 30) {
@@ -476,8 +532,11 @@ export function diagnoseLossReason(
         primaryReason: 'cliente_explorando',
         secondaryReasons: [],
         confidence: 0.4,
-        evidence: [`Sin contacto por ${abandonment.daysSinceLastContact} días, sin señales claras en la conversación`],
-        suggestedAction: 'Reactivar con contenido de valor. Evaluar si vale la pena el esfuerzo de recuperación.',
+        evidence: [
+          `Sin contacto por ${abandonment.daysSinceLastContact} días, sin señales claras en la conversación`,
+        ],
+        suggestedAction:
+          'Reactivar con contenido de valor. Evaluar si vale la pena el esfuerzo de recuperación.',
       };
     }
     return {
@@ -496,12 +555,11 @@ export function diagnoseLossReason(
 
   return {
     primaryReason: top.score > 0 ? top.reason : 'desconocido',
-    secondaryReasons: second && second.score > 0
-      ? [second.reason]
-      : [],
-    confidence: top.score > 0
-      ? Math.min(1, top.score / (scores.reduce((sum, s) => sum + s.score, 0) || top.score))
-      : 0.2,
+    secondaryReasons: second && second.score > 0 ? [second.reason] : [],
+    confidence:
+      top.score > 0
+        ? Math.min(1, top.score / (scores.reduce((sum, s) => sum + s.score, 0) || top.score))
+        : 0.2,
     evidence: top.evidence,
     suggestedAction: top.suggestion,
   };
@@ -513,7 +571,7 @@ export function scoreRecoverability(
   opportunityValue: number,
   abandonment: AbandonmentDiagnosis,
   intentSignals: IntentSignals,
-  messages: GHLMessage[]
+  messages: GHLMessage[],
 ): RecoverabilityScore {
   // Sub-score: Valor (0-30)
   // Escala logarítmica para no sobre-priorizar deals muy grandes
@@ -561,9 +619,11 @@ export function scoreRecoverability(
   const factors: string[] = [];
   if (valueScore >= 22) factors.push(`Alto valor: $${(opportunityValue / 1000000).toFixed(1)}M`);
   if (recencyScore >= 18) factors.push(`Contacto reciente (${abandonment.daysSinceLastContact}d)`);
-  if (intentSignals.purchaseIntent) factors.push(`Señales de compra: ${intentSignals.signals.join(', ')}`);
+  if (intentSignals.purchaseIntent)
+    factors.push(`Señales de compra: ${intentSignals.signals.join(', ')}`);
   if (engagementScore >= 15) factors.push(`Alto engagement (${inboundCount} mensajes inbound)`);
-  if (abandonment.direction === 'inbound_sin_respuesta') factors.push('Cliente esperando respuesta ⚠️');
+  if (abandonment.direction === 'inbound_sin_respuesta')
+    factors.push('Cliente esperando respuesta ⚠️');
 
   return {
     totalScore,
@@ -580,7 +640,7 @@ export function scoreRecoverability(
 
 export function analyzeConversation(
   conversation: GHLConversationInput,
-  opportunity?: GHLOpportunityInput
+  opportunity?: GHLOpportunityInput,
 ): ConversationAnalysis {
   const messages = conversation.messages || [];
   const opportunityValue = opportunity?.monetaryValue ?? 0;
@@ -596,18 +656,14 @@ export function analyzeConversation(
   const abandonment = detectAbandonment(messages, conversation.lastMessageDate);
 
   // 4. Diagnosticar razón de pérdida
-  const lossReason = diagnoseLossReason(
-    messages,
-    opportunity?.status ?? 'open',
-    abandonment
-  );
+  const lossReason = diagnoseLossReason(messages, opportunity?.status ?? 'open', abandonment);
 
   // 5. Scoring de recuperabilidad
   const recoverability = scoreRecoverability(
     opportunityValue,
     abandonment,
     intentSignals,
-    messages
+    messages,
   );
 
   // Determinar canal
@@ -640,7 +696,7 @@ export function analyzeConversation(
 export function generateBatchSummary(
   analyses: ConversationAnalysis[],
   pipelineId: string,
-  pipelineName: string
+  pipelineName: string,
 ): BatchAnalysisResult {
   const totalValue = analyses.reduce((sum, a) => sum + a.opportunityValue, 0);
 
@@ -672,7 +728,7 @@ export function generateBatchSummary(
     .sort((a, b) => b.value - a.value);
 
   const highPriority = analyses.filter(
-    (a) => a.recoverability.priority === 'high' || a.recoverability.priority === 'urgent'
+    (a) => a.recoverability.priority === 'high' || a.recoverability.priority === 'urgent',
   );
 
   return {
@@ -686,32 +742,30 @@ export function generateBatchSummary(
       highPriorityCount: highPriority.length,
       urgentCount: analyses.filter((a) => a.recoverability.priority === 'urgent').length,
       avgRecoverabilityScore: Math.round(
-        analyses.reduce((sum, a) => sum + a.recoverability.totalScore, 0) / (analyses.length || 1)
+        analyses.reduce((sum, a) => sum + a.recoverability.totalScore, 0) / (analyses.length || 1),
       ),
       topLossReasons,
       lossByStage,
     },
     conversations: analyses.sort(
-      (a, b) => b.recoverability.totalScore - a.recoverability.totalScore
+      (a, b) => b.recoverability.totalScore - a.recoverability.totalScore,
     ),
   };
 }
 
 // ─── Utilidades para el scheduler ─────────────────────────────────────────
 
-export function getUrgentConversations(
-  analyses: ConversationAnalysis[]
-): ConversationAnalysis[] {
+export function getUrgentConversations(analyses: ConversationAnalysis[]): ConversationAnalysis[] {
   return analyses.filter(
     (a) =>
       a.recoverability.priority === 'urgent' ||
       (a.abandonment.direction === 'inbound_sin_respuesta' &&
-        a.abandonment.daysSinceLastContact <= 2)
+        a.abandonment.daysSinceLastContact <= 2),
   );
 }
 
 export function getEarlyWarningConversations(
-  analyses: ConversationAnalysis[]
+  analyses: ConversationAnalysis[],
 ): ConversationAnalysis[] {
   const now = Date.now();
   return analyses.filter((a) => {

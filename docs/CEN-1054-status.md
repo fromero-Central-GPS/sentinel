@@ -1,6 +1,7 @@
 = CEN-1054 Sentinel MVP Status =
 
 == Completed ==
+
 - Scaffold Next.js 16 + TypeScript + Tailwind + ESLint
 - Auth Clerk: sign-in, sign-up, Google OAuth (fixed 2026-06-26), org creation
 - Schema PostgreSQL multitenant + migraciones Drizzle
@@ -17,10 +18,12 @@
 - Build: 0 errors, 22/22 static pages
 
 == Pending (child issues) ==
+
 - CEN-1049: Neon branches per environment
 - CEN-1050: Dev/staging domain setup
 
 == Recent Fixes ==
+
 - Google OAuth: bypassed unverified Clerk custom domain (accounts.supersonics.cl)
   Commit ec2fea5 — ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up"
   .env.local now has NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY

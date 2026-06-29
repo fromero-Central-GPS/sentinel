@@ -13,7 +13,11 @@ type MetaStatus = 'loading' | 'configured' | 'missing' | 'error';
 export default function OnboardingPage() {
   const { isLoaded, isSignedIn } = useAuth();
   const { organization } = useOrganization();
-  const { isLoaded: orgListLoaded, userMemberships, createOrganization } = useOrganizationList({
+  const {
+    isLoaded: orgListLoaded,
+    userMemberships,
+    createOrganization,
+  } = useOrganizationList({
     userMemberships: { infinite: true },
   });
   const router = useRouter();
@@ -92,7 +96,12 @@ export default function OnboardingPage() {
 
   // Auto-advance when org exists
   useEffect(() => {
-    if (step === 'create_org' && orgListLoaded && userMemberships?.data && userMemberships.data.length > 0) {
+    if (
+      step === 'create_org' &&
+      orgListLoaded &&
+      userMemberships?.data &&
+      userMemberships.data.length > 0
+    ) {
       if (ghlStatus === 'loading') {
         // Trigger check
         fetch('/api/settings/ghl')
@@ -209,9 +218,7 @@ export default function OnboardingPage() {
               <div key={s} className="flex items-center gap-2">
                 <div
                   className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-zinc-200 text-zinc-400'
+                    isActive ? 'bg-blue-600 text-white' : 'bg-zinc-200 text-zinc-400'
                   }`}
                 >
                   {isActive && stepIndex > currentIdx ? '✓' : i + 1}
@@ -231,13 +238,25 @@ export default function OnboardingPage() {
           {step === 'welcome' && (
             <div className="text-center space-y-4">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-100">
-                <svg className="h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  className="h-8 w-8 text-blue-600"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
               </div>
               <h1 className="text-2xl font-bold">Bienvenido a Sentinel</h1>
               <p className="text-zinc-500">
-                Analiza conversaciones de tu equipo comercial, recupera oportunidades perdidas y optimiza tu pipeline.
+                Analiza conversaciones de tu equipo comercial, recupera oportunidades perdidas y
+                optimiza tu pipeline.
               </p>
               <div className="animate-pulse text-sm text-blue-600 font-medium">
                 Preparando tu espacio de trabajo...
@@ -251,7 +270,8 @@ export default function OnboardingPage() {
               <div>
                 <h1 className="text-xl font-bold">Crea tu empresa</h1>
                 <p className="mt-1 text-sm text-zinc-500">
-                  Este será tu espacio de trabajo en Sentinel. Cada empresa tiene sus propias credenciales y datos.
+                  Este será tu espacio de trabajo en Sentinel. Cada empresa tiene sus propias
+                  credenciales y datos.
                 </p>
               </div>
 
@@ -265,7 +285,12 @@ export default function OnboardingPage() {
                     value={orgName}
                     onChange={(e) => {
                       setOrgName(e.target.value);
-                      setOrgSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''));
+                      setOrgSlug(
+                        e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, '-')
+                          .replace(/(^-|-$)/g, ''),
+                      );
                     }}
                     placeholder="Ej: Transportes del Sur Ltda."
                     className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
@@ -285,7 +310,11 @@ export default function OnboardingPage() {
                     className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-mono focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
                   />
                   <p className="mt-1 text-xs text-zinc-400">
-                    Usado en URLs. Sugerido: {orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || '...'}
+                    Usado en URLs. Sugerido:{' '}
+                    {orgName
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/(^-|-$)/g, '') || '...'}
                   </p>
                 </div>
 
@@ -312,7 +341,8 @@ export default function OnboardingPage() {
               <div>
                 <h1 className="text-xl font-bold">Conectá GoHighLevel</h1>
                 <p className="mt-1 text-sm text-zinc-500">
-                  Sentinel necesita acceso a tu cuenta de GHL para analizar conversaciones y oportunidades.
+                  Sentinel necesita acceso a tu cuenta de GHL para analizar conversaciones y
+                  oportunidades.
                 </p>
               </div>
 
@@ -375,7 +405,8 @@ export default function OnboardingPage() {
               <div>
                 <h1 className="text-xl font-bold">Conectá WhatsApp Business</h1>
                 <p className="mt-1 text-sm text-zinc-500">
-                  Opcional. Conectá tu cuenta de WhatsApp Business para analizar conversaciones de Meta.
+                  Opcional. Conectá tu cuenta de WhatsApp Business para analizar conversaciones de
+                  Meta.
                 </p>
               </div>
 
@@ -449,7 +480,18 @@ export default function OnboardingPage() {
           {step === 'done' && (
             <div className="text-center space-y-6">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                <svg className="h-8 w-8 text-green-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  className="h-8 w-8 text-green-600"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                   <polyline points="22 4 12 14.01 9 11.01" />
                 </svg>
@@ -459,15 +501,26 @@ export default function OnboardingPage() {
                 {ghlStatus === 'configured' && metaStatus === 'configured'
                   ? 'Tenés GHL y WhatsApp Business conectados. Ya podés empezar a analizar conversaciones.'
                   : ghlStatus === 'configured'
-                  ? 'GHL está conectado. Podés configurar WhatsApp más tarde desde Settings.'
-                  : 'Podés completar la configuración de GHL y WhatsApp en cualquier momento desde Settings.'}
+                    ? 'GHL está conectado. Podés configurar WhatsApp más tarde desde Settings.'
+                    : 'Podés completar la configuración de GHL y WhatsApp en cualquier momento desde Settings.'}
               </p>
               <button
                 onClick={() => router.push('/dashboard')}
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
               >
                 Ir al Dashboard
-                <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  className="h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M5 12h14" />
                   <path d="m12 5 7 7-7 7" />
                 </svg>

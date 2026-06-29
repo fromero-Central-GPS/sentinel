@@ -15,7 +15,8 @@ const SEED_PLANS = [
   {
     name: 'Free',
     slug: 'free',
-    description: 'Para equipos pequeños que quieren probar Sentinel. Análisis de hasta 100 conversaciones/mes.',
+    description:
+      'Para equipos pequeños que quieren probar Sentinel. Análisis de hasta 100 conversaciones/mes.',
     priceMonthlyClp: '0',
     features: JSON.stringify([
       '100 conversaciones analizadas/mes',
@@ -33,7 +34,8 @@ const SEED_PLANS = [
   {
     name: 'Pro',
     slug: 'pro',
-    description: 'Para equipos comerciales que necesitan prevenir pérdidas y optimizar conversión. Hasta 5,000 conversaciones/mes.',
+    description:
+      'Para equipos comerciales que necesitan prevenir pérdidas y optimizar conversión. Hasta 5,000 conversaciones/mes.',
     priceMonthlyClp: '49900',
     features: JSON.stringify([
       '5,000 conversaciones analizadas/mes',
@@ -52,7 +54,8 @@ const SEED_PLANS = [
   {
     name: 'Enterprise',
     slug: 'enterprise',
-    description: 'Para operaciones comerciales grandes. Conversaciones ilimitadas, soporte prioritario y personalización.',
+    description:
+      'Para operaciones comerciales grandes. Conversaciones ilimitadas, soporte prioritario y personalización.',
     priceMonthlyClp: '149900',
     features: JSON.stringify([
       'Conversaciones ilimitadas',
@@ -85,11 +88,7 @@ async function seed() {
   console.log('🌱 Seeding plans...');
 
   for (const plan of SEED_PLANS) {
-    const existing = await db
-      .select()
-      .from(plans)
-      .where(eq(plans.slug, plan.slug))
-      .execute();
+    const existing = await db.select().from(plans).where(eq(plans.slug, plan.slug)).execute();
 
     if (existing.length > 0) {
       console.log(`  ⏭️  Plan "${plan.name}" already exists, skipping.`);

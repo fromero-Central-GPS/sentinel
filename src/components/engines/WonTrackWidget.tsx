@@ -56,7 +56,9 @@ export default function WonTrackWidget() {
         </div>
         <div>
           <p className="text-gray-600">Conversion Rate:</p>
-          <p className={`text-2xl font-semibold ${conversionRate < 0.20 ? 'text-red-500' : 'text-green-600'}`}>
+          <p
+            className={`text-2xl font-semibold ${conversionRate < 0.2 ? 'text-red-500' : 'text-green-600'}`}
+          >
             {(conversionRate * 100).toFixed(2)}%
           </p>
         </div>

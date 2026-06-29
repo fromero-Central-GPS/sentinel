@@ -6,10 +6,21 @@ const ENGINES = [
   {
     href: '/dashboard/forense',
     title: 'Forense',
-    description: 'Clasifica conversaciones perdidas por fase y causa raíz. Prioriza cuáles vale la pena recuperar.',
+    description:
+      'Clasifica conversaciones perdidas por fase y causa raíz. Prioriza cuáles vale la pena recuperar.',
     status: 'active' as const,
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <circle cx="11" cy="11" r="8" />
         <path d="m21 21-4.35-4.35" />
       </svg>
@@ -21,10 +32,21 @@ const ENGINES = [
   {
     href: '/dashboard/live-opp',
     title: 'Live Opp',
-    description: 'Detecta oportunidades abiertas en riesgo antes de que se pierdan. Alertas tempranas por inactividad.',
+    description:
+      'Detecta oportunidades abiertas en riesgo antes de que se pierdan. Alertas tempranas por inactividad.',
     status: 'active' as const,
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
       </svg>
     ),
@@ -35,10 +57,21 @@ const ENGINES = [
   {
     href: '/dashboard/won-track',
     title: 'Won Track',
-    description: 'Monitorea patrones de deals ganados. Identifica señales y tiempos de cierre que replican el éxito.',
+    description:
+      'Monitorea patrones de deals ganados. Identifica señales y tiempos de cierre que replican el éxito.',
     status: 'active' as const,
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
         <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
         <path d="M4 22h16" />
@@ -73,7 +106,9 @@ export default async function DashboardPage() {
 
       {/* Motores */}
       <div>
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">Motores</h2>
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+          Motores
+        </h2>
         <div className="grid gap-4 sm:grid-cols-3">
           {ENGINES.map((engine) => (
             <Link
@@ -82,7 +117,9 @@ export default async function DashboardPage() {
               className={`flex flex-col gap-4 rounded-xl border p-5 transition-colors ${engine.border} dark:border-zinc-800`}
             >
               <div className="flex items-start justify-between">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${engine.bg} ${engine.color}`}>
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-lg ${engine.bg} ${engine.color}`}
+                >
                   {engine.icon}
                 </div>
                 {engine.status === 'active' ? (
@@ -112,7 +149,8 @@ export default async function DashboardPage() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
           <h2 className="font-semibold text-amber-800">Configuración pendiente</h2>
           <p className="mt-1 text-sm text-amber-700">
-            Crea una organización y configura las credenciales GHL para activar los motores con datos reales.
+            Crea una organización y configura las credenciales GHL para activar los motores con
+            datos reales.
           </p>
           <div className="mt-3 flex gap-3">
             <Link
@@ -127,7 +165,9 @@ export default async function DashboardPage() {
 
       {/* System info */}
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Sistema</h2>
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">
+          Sistema
+        </h2>
         <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: 'Framework', value: 'Next.js 16' },
@@ -135,7 +175,10 @@ export default async function DashboardPage() {
             { label: 'Database', value: 'Neon' },
             { label: 'ORM', value: 'Drizzle' },
           ].map(({ label, value }) => (
-            <div key={label} className="flex justify-between rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-900">
+            <div
+              key={label}
+              className="flex justify-between rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-900"
+            >
               <span className="text-zinc-500">{label}</span>
               <span className="font-medium font-mono text-zinc-800">{value}</span>
             </div>

@@ -64,9 +64,9 @@ curl -I https://accounts.centralgps.cl/sign-in
 
 ## Registros DNS necesarios (resumen)
 
-| Tipo | Nombre | Contenido | Propósito |
-|------|--------|-----------|-----------|
-| CNAME | `sentinel` | `cname.vercel-dns.com` | App en Vercel |
-| CNAME | `accounts` | `<valor de Clerk>` | Auth Clerk |
-| CNAME | `email` | `<valor de Clerk>` | Email tracking (opcional) |
-| TXT | `mail` | `v=spf1 ...` | SPF para emails (opcional) |
+| Tipo  | Nombre     | Contenido              | Propósito                  |
+| ----- | ---------- | ---------------------- | -------------------------- |
+| CNAME | `sentinel` | `cname.vercel-dns.com` | App en Vercel              |
+| CNAME | `accounts` | `<valor de Clerk>`     | Auth Clerk                 |
+| CNAME | `email`    | `<valor de Clerk>`     | Email tracking (opcional)  |
+| TXT   | `mail`     | `v=spf1 ...`           | SPF para emails (opcional) |

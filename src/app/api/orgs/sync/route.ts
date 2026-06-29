@@ -7,7 +7,10 @@ import { users, organizations, userOrganizations, subscriptions, plans } from '@
 export async function POST() {
   const { userId, orgId } = await auth();
   if (!userId || !orgId) {
-    return NextResponse.json({ error: 'Unauthorized — no user or org in session' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Unauthorized — no user or org in session' },
+      { status: 401 },
+    );
   }
 
   try {
@@ -21,11 +24,7 @@ export async function POST() {
     const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || email;
 
     // 1. Upsert user
-    const [existingUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.clerkId, userId))
-      .limit(1);
+    const [existingUser] = await db.select().from(users).where(eq(users.clerkId, userId)).limit(1);
 
     let userDbId: string;
     if (existingUser) {
@@ -69,10 +68,7 @@ export async function POST() {
       .select()
       .from(userOrganizations)
       .where(
-        and(
-          eq(userOrganizations.userId, userDbId),
-          eq(userOrganizations.organizationId, orgDbId)
-        )
+        and(eq(userOrganizations.userId, userDbId), eq(userOrganizations.organizationId, orgDbId)),
       )
       .limit(1);
 
@@ -92,11 +88,7 @@ export async function POST() {
       .limit(1);
 
     if (!existingSub) {
-      const [freePlan] = await db
-        .select()
-        .from(plans)
-        .where(eq(plans.slug, 'free'))
-        .limit(1);
+      const [freePlan] = await db.select().from(plans).where(eq(plans.slug, 'free')).limit(1);
 
       if (freePlan) {
         await db.insert(subscriptions).values({

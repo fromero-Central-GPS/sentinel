@@ -70,10 +70,14 @@ export default function PricingPage() {
   useEffect(() => {
     fetch('/api/billing/plans')
       .then((r) => r.json())
-      .then((d: { plans: Plan[] }) => setPlans(d.plans.sort((a, b) => {
-        const order: Record<string, number> = { free: 0, pro: 1, enterprise: 2 };
-        return (order[a.slug] ?? 99) - (order[b.slug] ?? 99);
-      })))
+      .then((d: { plans: Plan[] }) =>
+        setPlans(
+          d.plans.sort((a, b) => {
+            const order: Record<string, number> = { free: 0, pro: 1, enterprise: 2 };
+            return (order[a.slug] ?? 99) - (order[b.slug] ?? 99);
+          }),
+        ),
+      )
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -121,15 +125,25 @@ export default function PricingPage() {
     <div className="min-h-screen bg-zinc-50">
       {/* Nav */}
       <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4">
-        <Link href="/" className="text-lg font-bold tracking-tight">Sentinel</Link>
+        <Link href="/" className="text-lg font-bold tracking-tight">
+          Sentinel
+        </Link>
         <nav className="flex items-center gap-4 text-sm">
-          <Link href="/pricing" className="font-medium text-blue-600">Planes</Link>
+          <Link href="/pricing" className="font-medium text-blue-600">
+            Planes
+          </Link>
           {isSignedIn ? (
-            <Link href="/dashboard" className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
+            <Link
+              href="/dashboard"
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+            >
               Dashboard
             </Link>
           ) : (
-            <Link href="/sign-in" className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
+            <Link
+              href="/sign-in"
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+            >
               Iniciar sesión
             </Link>
           )}
@@ -175,14 +189,18 @@ export default function PricingPage() {
 
                 <div className="mb-6">
                   <p className="text-3xl font-bold">{formatCLP(plan.priceMonthlyClp)}</p>
-                  {!isFree && <p className="text-xs text-zinc-400 mt-1">CLP, facturación mensual</p>}
+                  {!isFree && (
+                    <p className="text-xs text-zinc-400 mt-1">CLP, facturación mensual</p>
+                  )}
                 </div>
 
                 {/* Limits */}
                 <div className="mb-6 space-y-2 text-sm">
                   <div className="flex justify-between rounded-lg bg-zinc-50 px-3 py-2">
                     <span className="text-zinc-600">Conversaciones/mes</span>
-                    <span className="font-semibold">{formatNumber(plan.maxConversationsPerMonth)}</span>
+                    <span className="font-semibold">
+                      {formatNumber(plan.maxConversationsPerMonth)}
+                    </span>
                   </div>
                   <div className="flex justify-between rounded-lg bg-zinc-50 px-3 py-2">
                     <span className="text-zinc-600">Usuarios</span>
@@ -193,25 +211,37 @@ export default function PricingPage() {
                 {/* Features */}
                 <ul className="mb-8 space-y-2.5 flex-1">
                   <li className="flex items-center gap-2 text-sm">
-                    <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${
-                      plan.hasForense === 'true' ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-300'
-                    }`}>
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${
+                        plan.hasForense === 'true'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-zinc-100 text-zinc-300'
+                      }`}
+                    >
                       {plan.hasForense === 'true' ? '✓' : '—'}
                     </span>
                     Motor Forense
                   </li>
                   <li className="flex items-center gap-2 text-sm">
-                    <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${
-                      plan.hasLiveOpp === 'true' ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-300'
-                    }`}>
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${
+                        plan.hasLiveOpp === 'true'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-zinc-100 text-zinc-300'
+                      }`}
+                    >
                       {plan.hasLiveOpp === 'true' ? '✓' : '—'}
                     </span>
                     Motor Live Opp
                   </li>
                   <li className="flex items-center gap-2 text-sm">
-                    <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${
-                      plan.hasWonTrack === 'true' ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-300'
-                    }`}>
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${
+                        plan.hasWonTrack === 'true'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-zinc-100 text-zinc-300'
+                      }`}
+                    >
                       {plan.hasWonTrack === 'true' ? '✓' : '—'}
                     </span>
                     Motor Won Track
@@ -232,19 +262,19 @@ export default function PricingPage() {
                     isFree
                       ? 'border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50'
                       : isPro
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'bg-zinc-900 text-white hover:bg-zinc-800'
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-zinc-900 text-white hover:bg-zinc-800'
                   } disabled:opacity-50`}
                 >
                   {changingPlan === plan.slug
                     ? 'Actualizando…'
                     : isSignedIn
-                    ? isFree
-                      ? 'Plan actual'
-                      : 'Seleccionar plan'
-                    : isFree
-                    ? 'Comenzar gratis'
-                    : 'Contratar'}
+                      ? isFree
+                        ? 'Plan actual'
+                        : 'Seleccionar plan'
+                      : isFree
+                        ? 'Comenzar gratis'
+                        : 'Contratar'}
                 </button>
               </div>
             );

@@ -69,7 +69,9 @@ export default function SettingsPage() {
 
     fetch('/api/billing/usage')
       .then((r) => r.json())
-      .then((d) => { if (d?.usage) setUsage(d); })
+      .then((d) => {
+        if (d?.usage) setUsage(d);
+      })
       .catch(() => {});
 
     fetch('/api/billing/plans')
@@ -177,17 +179,16 @@ export default function SettingsPage() {
           >
             Guardar
           </button>
-          <button
-            onClick={verifyGhl}
-            className="rounded border px-4 py-2 text-sm hover:bg-gray-50"
-          >
+          <button onClick={verifyGhl} className="rounded border px-4 py-2 text-sm hover:bg-gray-50">
             Verificar conexión
           </button>
           {ghlStatus && <span className="text-sm text-gray-600">{ghlStatus}</span>}
         </div>
 
         {verifyStatus && (
-          <p className={`text-sm ${verifyStatus.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}>
+          <p
+            className={`text-sm ${verifyStatus.startsWith('✓') ? 'text-green-600' : 'text-red-600'}`}
+          >
             {verifyStatus}
           </p>
         )}
@@ -198,7 +199,9 @@ export default function SettingsPage() {
         <h2 className="text-lg font-semibold">Meta / WhatsApp Business</h2>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium">WABA ID (WhatsApp Business Account ID)</label>
+          <label className="block text-sm font-medium">
+            WABA ID (WhatsApp Business Account ID)
+          </label>
           <input
             type="text"
             value={metaWabaId}
@@ -225,7 +228,9 @@ export default function SettingsPage() {
             type="password"
             value={metaAccessToken}
             onChange={(e) => setMetaAccessToken(e.target.value)}
-            placeholder={meta.metaAccessToken ? meta.metaAccessToken : 'Ingresa tu access token permanente'}
+            placeholder={
+              meta.metaAccessToken ? meta.metaAccessToken : 'Ingresa tu access token permanente'
+            }
             className="w-full rounded border px-3 py-2 text-sm font-mono"
           />
           {meta.metaAccessToken && (
@@ -245,11 +250,15 @@ export default function SettingsPage() {
         {meta.metaWebhookVerifyToken && (
           <div className="mt-4 rounded bg-gray-50 p-4 space-y-3 border">
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Webhook Verify Token</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Webhook Verify Token
+              </p>
               <p className="mt-1 font-mono text-sm break-all">{meta.metaWebhookVerifyToken}</p>
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Webhook URL</p>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Webhook URL
+              </p>
               <div className="mt-1 flex items-center gap-2">
                 <input
                   ref={webhookInputRef}
@@ -264,7 +273,9 @@ export default function SettingsPage() {
                   {copied ? 'Copiado ✓' : 'Copiar'}
                 </button>
               </div>
-              <p className="mt-1 text-xs text-gray-500">Registra esta URL en Meta Business Suite → WhatsApp → Webhooks</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Registra esta URL en Meta Business Suite → WhatsApp → Webhooks
+              </p>
             </div>
           </div>
         )}
@@ -308,8 +319,11 @@ export default function SettingsPage() {
                 <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
-                      usage.limits.usagePercent >= 90 ? 'bg-red-500' :
-                      usage.limits.usagePercent >= 70 ? 'bg-amber-400' : 'bg-blue-500'
+                      usage.limits.usagePercent >= 90
+                        ? 'bg-red-500'
+                        : usage.limits.usagePercent >= 70
+                          ? 'bg-amber-400'
+                          : 'bg-blue-500'
                     }`}
                     style={{ width: `${Math.min(100, usage.limits.usagePercent)}%` }}
                   />
@@ -336,10 +350,14 @@ export default function SettingsPage() {
           {/* Subscription status */}
           {subscription.subscription && (
             <div className="text-xs text-zinc-400 space-y-0.5">
-              <p>Estado: <span className="font-medium capitalize">{subscription.subscription.status}</span></p>
+              <p>
+                Estado:{' '}
+                <span className="font-medium capitalize">{subscription.subscription.status}</span>
+              </p>
               {subscription.subscription.currentPeriodEnd && (
                 <p>
-                  Próximo período: {new Date(subscription.subscription.currentPeriodEnd).toLocaleDateString('es-CL')}
+                  Próximo período:{' '}
+                  {new Date(subscription.subscription.currentPeriodEnd).toLocaleDateString('es-CL')}
                 </p>
               )}
             </div>
@@ -368,11 +386,18 @@ export default function SettingsPage() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ planSlug: plan.slug }),
                       });
-                      if (!res.ok) { alert('Error al actualizar'); setChangingPlan(''); return; }
+                      if (!res.ok) {
+                        alert('Error al actualizar');
+                        setChangingPlan('');
+                        return;
+                      }
                       const upd = await fetch('/api/billing/subscription').then((r) => r.json());
                       setSubscription(upd);
                       setChangingPlan('');
-                    } catch { alert('Error de conexión'); setChangingPlan(''); }
+                    } catch {
+                      alert('Error de conexión');
+                      setChangingPlan('');
+                    }
                   }}
                   disabled={changingPlan === plan.slug}
                   className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"

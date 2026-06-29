@@ -4,7 +4,11 @@ import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { decrypt } from '@/lib/encryption';
-import { enforceMotorAccess, enforceConversationLimit, incrementUsage } from '@/lib/plan-enforcement';
+import {
+  enforceMotorAccess,
+  enforceConversationLimit,
+  incrementUsage,
+} from '@/lib/plan-enforcement';
 import {
   classifyFunnelStage,
   diagnoseLossReason,
@@ -23,52 +27,131 @@ const GHL_VERSION = '2021-07-28';
 // ─── Mock data for demo mode ─────────────────────────────────────────────
 
 const MOCK_MESSAGES: GHLMessage[] = [
-  { id: 'm1', direction: 'outbound', body: 'Hola, gracias por contactarnos. ¿En qué podemos ayudarte?', messageType: 'TYPE_SMS', dateAdded: '2026-06-10T10:00:00Z' },
-  { id: 'm2', direction: 'inbound', body: 'Me interesa el servicio para una flota de 5 vehículos', messageType: 'TYPE_WHATSAPP', dateAdded: '2026-06-10T10:05:00Z' },
-  { id: 'm3', direction: 'outbound', body: 'Perfecto. El plan Pro incluye reportes en tiempo real.', messageType: 'TYPE_WHATSAPP', dateAdded: '2026-06-10T10:10:00Z' },
-  { id: 'm4', direction: 'outbound', body: 'El valor es de $45.000 mensuales por equipo.', messageType: 'TYPE_WHATSAPP', dateAdded: '2026-06-10T10:12:00Z' },
-  { id: 'm5', direction: 'inbound', body: 'Ok, gracias. Lo voy a evaluar con mi jefe.', messageType: 'TYPE_WHATSAPP', dateAdded: '2026-06-10T10:15:00Z' },
-  { id: 'm6', direction: 'inbound', body: 'Solo estaba cotizando, más adelante les escribo.', messageType: 'TYPE_WHATSAPP', dateAdded: '2026-06-12T10:40:00Z' },
-  { id: 'm7', direction: 'inbound', body: 'Está muy caro, la competencia me ofrece algo similar por menos.', messageType: 'TYPE_WHATSAPP', dateAdded: '2026-05-20T09:10:00Z' },
-  { id: 'm8', direction: 'outbound', body: 'Entendible. Nuestra diferencia es el soporte local 24/7.', messageType: 'TYPE_WHATSAPP', dateAdded: '2026-05-20T09:15:00Z' },
-  { id: 'm9', direction: 'inbound', body: 'Lo vamos a pensar. Gracias.', messageType: 'TYPE_WHATSAPP', dateAdded: '2026-05-20T09:20:00Z' },
-  { id: 'm10', direction: 'inbound', body: 'Ya contraté con otra empresa. Gracias de todas formas.', messageType: 'TYPE_WHATSAPP', dateAdded: '2026-03-20T10:00:00Z' },
+  {
+    id: 'm1',
+    direction: 'outbound',
+    body: 'Hola, gracias por contactarnos. ¿En qué podemos ayudarte?',
+    messageType: 'TYPE_SMS',
+    dateAdded: '2026-06-10T10:00:00Z',
+  },
+  {
+    id: 'm2',
+    direction: 'inbound',
+    body: 'Me interesa el servicio para una flota de 5 vehículos',
+    messageType: 'TYPE_WHATSAPP',
+    dateAdded: '2026-06-10T10:05:00Z',
+  },
+  {
+    id: 'm3',
+    direction: 'outbound',
+    body: 'Perfecto. El plan Pro incluye reportes en tiempo real.',
+    messageType: 'TYPE_WHATSAPP',
+    dateAdded: '2026-06-10T10:10:00Z',
+  },
+  {
+    id: 'm4',
+    direction: 'outbound',
+    body: 'El valor es de $45.000 mensuales por equipo.',
+    messageType: 'TYPE_WHATSAPP',
+    dateAdded: '2026-06-10T10:12:00Z',
+  },
+  {
+    id: 'm5',
+    direction: 'inbound',
+    body: 'Ok, gracias. Lo voy a evaluar con mi jefe.',
+    messageType: 'TYPE_WHATSAPP',
+    dateAdded: '2026-06-10T10:15:00Z',
+  },
+  {
+    id: 'm6',
+    direction: 'inbound',
+    body: 'Solo estaba cotizando, más adelante les escribo.',
+    messageType: 'TYPE_WHATSAPP',
+    dateAdded: '2026-06-12T10:40:00Z',
+  },
+  {
+    id: 'm7',
+    direction: 'inbound',
+    body: 'Está muy caro, la competencia me ofrece algo similar por menos.',
+    messageType: 'TYPE_WHATSAPP',
+    dateAdded: '2026-05-20T09:10:00Z',
+  },
+  {
+    id: 'm8',
+    direction: 'outbound',
+    body: 'Entendible. Nuestra diferencia es el soporte local 24/7.',
+    messageType: 'TYPE_WHATSAPP',
+    dateAdded: '2026-05-20T09:15:00Z',
+  },
+  {
+    id: 'm9',
+    direction: 'inbound',
+    body: 'Lo vamos a pensar. Gracias.',
+    messageType: 'TYPE_WHATSAPP',
+    dateAdded: '2026-05-20T09:20:00Z',
+  },
+  {
+    id: 'm10',
+    direction: 'inbound',
+    body: 'Ya contraté con otra empresa. Gracias de todas formas.',
+    messageType: 'TYPE_WHATSAPP',
+    dateAdded: '2026-03-20T10:00:00Z',
+  },
 ];
 
 function buildMockConversations(): GHLConversationInput[] {
   return [
     {
-      id: 'CONV-DEMO-1', contactId: 'c1', contactName: 'Demo Cliente (Empresa A)',
-      email: 'demo1@empresa-a.cl', phone: '+56912345678',
+      id: 'CONV-DEMO-1',
+      contactId: 'c1',
+      contactName: 'Demo Cliente (Empresa A)',
+      email: 'demo1@empresa-a.cl',
+      phone: '+56912345678',
       lastMessageDate: Date.now() - 56 * 86400000,
-      lastMessageType: 'TYPE_WHATSAPP', lastMessageBody: 'Solo estaba cotizando',
-      lastMessageDirection: 'inbound', unreadCount: 0,
+      lastMessageType: 'TYPE_WHATSAPP',
+      lastMessageBody: 'Solo estaba cotizando',
+      lastMessageDirection: 'inbound',
+      unreadCount: 0,
       tags: ['lost', 'high-value'],
-      messages: [MOCK_MESSAGES[0], MOCK_MESSAGES[1], MOCK_MESSAGES[2], MOCK_MESSAGES[3], MOCK_MESSAGES[4], MOCK_MESSAGES[5]],
+      messages: [
+        MOCK_MESSAGES[0],
+        MOCK_MESSAGES[1],
+        MOCK_MESSAGES[2],
+        MOCK_MESSAGES[3],
+        MOCK_MESSAGES[4],
+        MOCK_MESSAGES[5],
+      ],
     },
     {
-      id: 'CONV-DEMO-2', contactId: 'c2', contactName: 'Demo Cliente (Empresa B)',
-      email: 'demo2@empresa-b.cl', phone: '+56987654321',
+      id: 'CONV-DEMO-2',
+      contactId: 'c2',
+      contactName: 'Demo Cliente (Empresa B)',
+      email: 'demo2@empresa-b.cl',
+      phone: '+56987654321',
       lastMessageDate: Date.now() - 30 * 86400000,
-      lastMessageType: 'TYPE_WHATSAPP', lastMessageBody: 'Ya contraté con otra empresa',
-      lastMessageDirection: 'inbound', unreadCount: 0,
+      lastMessageType: 'TYPE_WHATSAPP',
+      lastMessageBody: 'Ya contraté con otra empresa',
+      lastMessageDirection: 'inbound',
+      unreadCount: 0,
       tags: ['lost', 'competitor'],
       messages: [MOCK_MESSAGES[6], MOCK_MESSAGES[7], MOCK_MESSAGES[8], MOCK_MESSAGES[9]],
     },
   ];
 }
 
-function runForensicsPipeline(
-  conversations: GHLConversationInput[],
-  opps: GHLOpportunityInput[],
-) {
+function runForensicsPipeline(conversations: GHLConversationInput[], opps: GHLOpportunityInput[]) {
   const analyses = conversations.map((conv, i) => {
     const opp = opps[i];
     const abandonment = detectAbandonment(conv.messages || [], conv.lastMessageDate);
     const intentSignals = detectPurchaseIntent(conv.messages || []);
     const stageClassification = classifyFunnelStage(conv.messages || [], opp.pipelineStageName);
     const lossReason = diagnoseLossReason(conv.messages || [], 'lost', abandonment);
-    const recoverability = scoreRecoverability(opp.monetaryValue, abandonment, intentSignals, conv.messages || []);
+    const recoverability = scoreRecoverability(
+      opp.monetaryValue,
+      abandonment,
+      intentSignals,
+      conv.messages || [],
+    );
     return {
       conversationId: conv.id,
       contactId: conv.contactId,
@@ -91,25 +174,46 @@ function runForensicsPipeline(
 
 async function fetchGhlLostOpportunities(token: string, locationId: string, limit = 20) {
   const url = `${GHL_BASE}/opportunities/search?location_id=${locationId}&status=lost&limit=${limit}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION } });
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION },
+  });
   if (!res.ok) throw new Error(`GHL opportunities error: ${res.status}`);
-  const data = await res.json() as { opportunities?: unknown[] };
+  const data = (await res.json()) as { opportunities?: unknown[] };
   return (data.opportunities ?? []) as GHLRawOpportunity[];
 }
 
-async function fetchGhlConversationIdByContact(token: string, locationId: string, contactId: string): Promise<string | null> {
+async function fetchGhlConversationIdByContact(
+  token: string,
+  locationId: string,
+  contactId: string,
+): Promise<string | null> {
   const url = `${GHL_BASE}/conversations/search?locationId=${locationId}&contactId=${contactId}&limit=1`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION } });
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION },
+  });
   if (!res.ok) return null;
-  const data = await res.json() as { conversations?: Array<{ id: string }> };
+  const data = (await res.json()) as { conversations?: Array<{ id: string }> };
   return data.conversations?.[0]?.id ?? null;
 }
 
-async function fetchGhlConversationMessages(token: string, conversationId: string): Promise<GHLMessage[]> {
+async function fetchGhlConversationMessages(
+  token: string,
+  conversationId: string,
+): Promise<GHLMessage[]> {
   const url = `${GHL_BASE}/conversations/${conversationId}/messages?limit=50`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION } });
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION },
+  });
   if (!res.ok) return [];
-  const data = await res.json() as { messages?: Array<{ id: string; direction: string; body: string; messageType: string; dateAdded: string }> };
+  const data = (await res.json()) as {
+    messages?: Array<{
+      id: string;
+      direction: string;
+      body: string;
+      messageType: string;
+      dateAdded: string;
+    }>;
+  };
   return (data.messages ?? []).map((m) => ({
     id: m.id,
     direction: m.direction as 'inbound' | 'outbound',
@@ -133,8 +237,32 @@ export async function GET(request: Request) {
   if (mode === 'mock') {
     const conversations = buildMockConversations();
     const opps: GHLOpportunityInput[] = [
-      { id: 'OPP-1', name: 'Demo Cliente (Empresa A)', contactId: 'c1', contactName: 'Demo Cliente (Empresa A)', monetaryValue: 41116655, pipelineId: 'tenant-pipeline', pipelineStageId: 'lost', pipelineStageName: 'Perdido', status: 'lost', lastStageChangeAt: '2026-04-30T00:00:00Z', createdAt: '2026-01-15T00:00:00Z' },
-      { id: 'OPP-2', name: 'Demo Cliente (Empresa B)', contactId: 'c2', contactName: 'Demo Cliente (Empresa B)', monetaryValue: 4300000, pipelineId: 'tenant-pipeline', pipelineStageId: 'lost', pipelineStageName: 'Perdido', status: 'lost', lastStageChangeAt: '2026-05-26T00:00:00Z', createdAt: '2026-02-20T00:00:00Z' },
+      {
+        id: 'OPP-1',
+        name: 'Demo Cliente (Empresa A)',
+        contactId: 'c1',
+        contactName: 'Demo Cliente (Empresa A)',
+        monetaryValue: 41116655,
+        pipelineId: 'tenant-pipeline',
+        pipelineStageId: 'lost',
+        pipelineStageName: 'Perdido',
+        status: 'lost',
+        lastStageChangeAt: '2026-04-30T00:00:00Z',
+        createdAt: '2026-01-15T00:00:00Z',
+      },
+      {
+        id: 'OPP-2',
+        name: 'Demo Cliente (Empresa B)',
+        contactId: 'c2',
+        contactName: 'Demo Cliente (Empresa B)',
+        monetaryValue: 4300000,
+        pipelineId: 'tenant-pipeline',
+        pipelineStageId: 'lost',
+        pipelineStageName: 'Perdido',
+        status: 'lost',
+        lastStageChangeAt: '2026-05-26T00:00:00Z',
+        createdAt: '2026-02-20T00:00:00Z',
+      },
     ];
 
     const batchResult = runForensicsPipeline(conversations, opps);
@@ -156,7 +284,11 @@ export async function GET(request: Request) {
     const [row] = await db.select().from(appSettings).where(eq(appSettings.tenantId, orgId));
     if (!row?.ghlApiToken || !row?.ghlLocationId) {
       return NextResponse.json(
-        { error: 'GHL not configured', hint: 'Ve a /settings y configura el API Token y Location ID de GHL.', _meta: { mode: 'live', configured: false } },
+        {
+          error: 'GHL not configured',
+          hint: 'Ve a /settings y configura el API Token y Location ID de GHL.',
+          _meta: { mode: 'live', configured: false },
+        },
         { status: 400 },
       );
     }
@@ -174,7 +306,11 @@ export async function GET(request: Request) {
       if (rawOpps.length === 0) {
         return NextResponse.json({
           batchResult: null,
-          _meta: { mode: 'live', conversationCount: 0, note: 'No hay oportunidades perdidas en GHL.' },
+          _meta: {
+            mode: 'live',
+            conversationCount: 0,
+            note: 'No hay oportunidades perdidas en GHL.',
+          },
         });
       }
 
@@ -183,7 +319,13 @@ export async function GET(request: Request) {
       if (limitCheck.blocked) return limitCheck.response!;
 
       // Fetch conversations with messages for each opportunity
-      const debugPerOpp: Array<{ oppId: string; contactId: string | null; conversationIdSource: string; conversationId: string | null; messageCount: number }> = [];
+      const debugPerOpp: Array<{
+        oppId: string;
+        contactId: string | null;
+        conversationIdSource: string;
+        conversationId: string | null;
+        messageCount: number;
+      }> = [];
 
       const conversations: GHLConversationInput[] = await Promise.all(
         rawOpps.slice(0, 15).map(async (opp) => {
@@ -200,14 +342,21 @@ export async function GET(request: Request) {
             ? await fetchGhlConversationMessages(token, conversationId)
             : [];
 
-          debugPerOpp.push({ oppId: opp.id, contactId, conversationIdSource: convIdSource, conversationId, messageCount: messages.length });
+          debugPerOpp.push({
+            oppId: opp.id,
+            contactId,
+            conversationIdSource: convIdSource,
+            conversationId,
+            messageCount: messages.length,
+          });
 
           // Use real last-message timestamp; fall back to lastStageChangeAt to avoid 0-days bug
-          const lastMsgTimestamp = messages.length > 0
-            ? Math.max(...messages.map((m) => new Date(m.dateAdded).getTime()))
-            : opp.lastStageChangeAt
-              ? new Date(opp.lastStageChangeAt).getTime()
-              : Date.now();
+          const lastMsgTimestamp =
+            messages.length > 0
+              ? Math.max(...messages.map((m) => new Date(m.dateAdded).getTime()))
+              : opp.lastStageChangeAt
+                ? new Date(opp.lastStageChangeAt).getTime()
+                : Date.now();
 
           return {
             id: conversationId ?? opp.id,

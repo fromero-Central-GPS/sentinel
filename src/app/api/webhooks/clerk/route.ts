@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   if (!signingSecret) {
     return NextResponse.json(
       { error: 'CLERK_WEBHOOK_SIGNING_SECRET not configured' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -146,9 +146,7 @@ export async function POST(request: NextRequest) {
           .limit(1);
 
         if (existingOrg.length > 0) {
-          await db
-            .delete(schema.organizations)
-            .where(eq(schema.organizations.clerkOrgId, data.id));
+          await db.delete(schema.organizations).where(eq(schema.organizations.clerkOrgId, data.id));
         }
         break;
       }
@@ -174,8 +172,8 @@ export async function POST(request: NextRequest) {
             .where(
               and(
                 eq(schema.userOrganizations.userId, userRecord[0].id),
-                eq(schema.userOrganizations.organizationId, orgRecord[0].id)
-              )
+                eq(schema.userOrganizations.organizationId, orgRecord[0].id),
+              ),
             )
             .limit(1);
 
@@ -209,8 +207,8 @@ export async function POST(request: NextRequest) {
             .where(
               and(
                 eq(schema.userOrganizations.userId, userRecord[0].id),
-                eq(schema.userOrganizations.organizationId, orgRecord[0].id)
-              )
+                eq(schema.userOrganizations.organizationId, orgRecord[0].id),
+              ),
             );
         }
         break;

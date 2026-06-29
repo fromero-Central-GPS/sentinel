@@ -124,7 +124,7 @@ export async function enforceMotorAccess(motor: MotorName): Promise<EnforcementR
       message: 'No organization selected. Create an org first.',
       response: NextResponse.json(
         { error: 'No organization selected', code: 'no_org' },
-        { status: 401 }
+        { status: 401 },
       ),
     };
   }
@@ -142,7 +142,7 @@ export async function enforceMotorAccess(motor: MotorName): Promise<EnforcementR
           currentPlan: limits.planName,
           motor,
         },
-        { status: 402 }
+        { status: 402 },
       ),
     };
   }
@@ -157,7 +157,12 @@ function currentPeriodKey(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export async function getCurrentUsage(): Promise<{ conversations: number; forense: number; liveOpp: number; wonTrack: number }> {
+export async function getCurrentUsage(): Promise<{
+  conversations: number;
+  forense: number;
+  liveOpp: number;
+  wonTrack: number;
+}> {
   const tenant = await resolveTenantId();
   if (!tenant) return { conversations: 0, forense: 0, liveOpp: 0, wonTrack: 0 };
 
@@ -166,12 +171,7 @@ export async function getCurrentUsage(): Promise<{ conversations: number; forens
     const [record] = await db
       .select()
       .from(usageLog)
-      .where(
-        and(
-          eq(usageLog.organizationId, tenant.orgDbId),
-          eq(usageLog.periodKey, periodKey)
-        )
-      );
+      .where(and(eq(usageLog.organizationId, tenant.orgDbId), eq(usageLog.periodKey, periodKey)));
 
     if (!record) {
       return { conversations: 0, forense: 0, liveOpp: 0, wonTrack: 0 };
@@ -196,17 +196,26 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
   const periodKey = currentPeriodKey();
 
   // Upsert: find or create usage record for this period
-  let existing: { id: string; conversationsAnalyzed: string; forenseRuns: string; liveOppRuns: string; wonTrackRuns: string } | undefined;
+  let existing:
+    | {
+        id: string;
+        conversationsAnalyzed: string;
+        forenseRuns: string;
+        liveOppRuns: string;
+        wonTrackRuns: string;
+      }
+    | undefined;
   try {
     [existing] = await db
-      .select({ id: usageLog.id, conversationsAnalyzed: usageLog.conversationsAnalyzed, forenseRuns: usageLog.forenseRuns, liveOppRuns: usageLog.liveOppRuns, wonTrackRuns: usageLog.wonTrackRuns })
+      .select({
+        id: usageLog.id,
+        conversationsAnalyzed: usageLog.conversationsAnalyzed,
+        forenseRuns: usageLog.forenseRuns,
+        liveOppRuns: usageLog.liveOppRuns,
+        wonTrackRuns: usageLog.wonTrackRuns,
+      })
       .from(usageLog)
-      .where(
-        and(
-          eq(usageLog.organizationId, tenant.orgDbId),
-          eq(usageLog.periodKey, periodKey)
-        )
-      );
+      .where(and(eq(usageLog.organizationId, tenant.orgDbId), eq(usageLog.periodKey, periodKey)));
   } catch {
     // usage_log table not yet migrated — skip tracking silently
     return;
@@ -214,7 +223,8 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
 
   if (existing) {
     const currentConversations = parseInt(existing.conversationsAnalyzed, 10);
-    const fieldKey = motor === 'forense' ? 'forenseRuns' : motor === 'liveOpp' ? 'liveOppRuns' : 'wonTrackRuns';
+    const fieldKey =
+      motor === 'forense' ? 'forenseRuns' : motor === 'liveOpp' ? 'liveOppRuns' : 'wonTrackRuns';
     const currentRuns = parseInt(existing[fieldKey], 10);
 
     await db
@@ -230,16 +240,14 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
     const liveOppRuns = motor === 'liveOpp' ? '1' : '0';
     const wonTrackRuns = motor === 'wonTrack' ? '1' : '0';
 
-    await db
-      .insert(usageLog)
-      .values({
-        organizationId: tenant.orgDbId,
-        periodKey,
-        conversationsAnalyzed: String(conversationCount),
-        forenseRuns,
-        liveOppRuns,
-        wonTrackRuns,
-      });
+    await db.insert(usageLog).values({
+      organizationId: tenant.orgDbId,
+      periodKey,
+      conversationsAnalyzed: String(conversationCount),
+      forenseRuns,
+      liveOppRuns,
+      wonTrackRuns,
+    });
   }
 }
 
@@ -271,7 +279,7 @@ export async function enforceConversationLimit(requested: number): Promise<Enfor
           limit: limits.maxConversationsPerMonth,
           plan: limits.planName,
         },
-        { status: 429 }
+        { status: 429 },
       ),
     };
   }
