@@ -183,17 +183,24 @@ export async function GET(request: Request) {
       if (limitCheck.blocked) return limitCheck.response!;
 
       // Fetch conversations with messages for each opportunity
+      const debugPerOpp: Array<{ oppId: string; contactId: string | null; conversationIdSource: string; conversationId: string | null; messageCount: number }> = [];
+
       const conversations: GHLConversationInput[] = await Promise.all(
         rawOpps.slice(0, 15).map(async (opp) => {
+          const contactId = opp.contact?.id ?? null;
           // GHL /opportunities/search often omits conversationId — fall back to contact lookup
           let conversationId = opp.conversationId ?? null;
-          if (!conversationId && opp.contact?.id) {
-            conversationId = await fetchGhlConversationIdByContact(token, locationId, opp.contact.id);
+          let convIdSource = 'opp_direct';
+          if (!conversationId && contactId) {
+            conversationId = await fetchGhlConversationIdByContact(token, locationId, contactId);
+            convIdSource = conversationId ? 'contact_lookup' : 'not_found';
           }
 
           const messages = conversationId
             ? await fetchGhlConversationMessages(token, conversationId)
             : [];
+
+          debugPerOpp.push({ oppId: opp.id, contactId, conversationIdSource: convIdSource, conversationId, messageCount: messages.length });
 
           // Use real last-message timestamp; fall back to lastStageChangeAt to avoid 0-days bug
           const lastMsgTimestamp = messages.length > 0
@@ -204,7 +211,7 @@ export async function GET(request: Request) {
 
           return {
             id: conversationId ?? opp.id,
-            contactId: opp.contact?.id ?? opp.id,
+            contactId: contactId ?? opp.id,
             contactName: opp.contact?.name ?? opp.name ?? 'Desconocido',
             lastMessageDate: lastMsgTimestamp,
             lastMessageType: 'TYPE_WHATSAPP',
@@ -240,10 +247,12 @@ export async function GET(request: Request) {
         batchResult,
         _meta: {
           mode: 'live',
+          codeVersion: '80e9e7a',
           analyzedAt: new Date().toISOString(),
           conversationCount: conversations.length,
           locationId,
           note: 'Datos reales desde GHL API del tenant.',
+          debug: debugPerOpp,
         },
       });
     } catch (err) {
