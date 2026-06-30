@@ -10,51 +10,14 @@
  * Basado en datos reales de Central GPS (198 won opportunities, ~$20M CLP).
  */
 
+import type { CanonicalMessage, Deal } from './types';
+
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
-export interface GHLMessage {
-  id: string;
-  direction: 'inbound' | 'outbound';
-  body: string;
-  dateAdded: string;
-  messageType: string;
-  status?: string;
-  source?: string;
-  attachments?: Array<{ url: string }>;
-}
-
-export interface GHLOpportunity {
-  id: string;
-  name: string;
-  monetaryValue: number;
-  pipelineName: string;
-  pipelineStageName: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  contactId: string;
-  contact: {
-    id: string;
-    name: string;
-    companyName?: string | null;
-    email?: string;
-    phone?: string;
-    tags?: string[];
-    score?: Array<{ id: string; score: number }>;
-  };
-  customFields?: Array<{
-    id: string;
-    fieldValueString?: string;
-    fieldValueNumber?: number;
-    type: string;
-  }>;
-  attributions?: Array<{
-    utmSessionSource?: string;
-    medium?: string;
-    isFirst?: boolean;
-    isLast?: boolean;
-  }>;
-}
+/** @deprecated Usar `CanonicalMessage` de `./types`. Alias de compatibilidad. */
+export type GHLMessage = CanonicalMessage;
+/** @deprecated Usar `Deal` de `./types`. Alias de compatibilidad. */
+export type GHLOpportunity = Deal;
 
 // ─── Utilidades ─────────────────────────────────────────────────────────────
 
@@ -65,6 +28,56 @@ function median(sortedAsc: number[]): number {
   const mid = Math.floor(n / 2);
   return n % 2 === 0 ? (sortedAsc[mid - 1] + sortedAsc[mid]) / 2 : sortedAsc[mid];
 }
+
+/** Promedio simple (0 si el array está vacío). */
+function mean(values: number[]): number {
+  return values.length === 0 ? 0 : values.reduce((s, v) => s + v, 0) / values.length;
+}
+
+/**
+ * Percentil con interpolación lineal sobre un array ASC. `p` en [0,1].
+ * Robusto a outliers — base del saneamiento de thresholds (vs. avg crudo).
+ */
+function percentile(sortedAsc: number[], p: number): number {
+  const n = sortedAsc.length;
+  if (n === 0) return 0;
+  if (n === 1) return sortedAsc[0];
+  const idx = (n - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sortedAsc[lo];
+  return sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (idx - lo);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Milisegundos epoch de un timestamp ISO, o NaN si es inválido. */
+function msOf(dateStr: string): number {
+  const t = new Date(dateStr).getTime();
+  return Number.isFinite(t) ? t : NaN;
+}
+
+// ─── Saneamiento de tiempos de respuesta ─────────────────────────────────────
+//
+// El test real (CentralGPS, jun-2026) mostró thresholds absurdos: respuesta
+// "ideal" 33h, "peligro" 94h, y deals con respuesta 0min. Causas: timestamps
+// sucios (réplicas con la misma hora → 0min) y outliers (gaps de días contados
+// como "tiempo de respuesta") promediados crudos, más multiplicadores mágicos
+// (ideal=avg×0.7, peligro=avg×2). Estas constantes y el uso de percentiles
+// reemplazan esa heurística por algo defendible y acotado.
+
+/** Tiempo de respuesta máximo creíble: más allá es re-enganche, no respuesta. */
+const MAX_RESPONSE_MIN = 3 * 24 * 60; // 3 días
+/** Pisos/techos defendibles para los thresholds que alimentan Live Opp. */
+const IDEAL_RESPONSE_FLOOR_MIN = 5; // nunca exigir responder en <5min
+const IDEAL_RESPONSE_CAP_MIN = 120; // meta ≤2h aunque la muestra sea peor
+const DANGER_RESPONSE_FLOOR_MIN = 60; // no marcar peligro por debajo de 1h
+const DANGER_RESPONSE_CAP_MIN = 8 * 60; // 8h (jornada): más allá Live Opp nunca alertaría
+/** Defaults cuando no hay datos de respuesta utilizables. */
+const DEFAULT_IDEAL_RESPONSE_MIN = 30;
+const DEFAULT_DANGER_RESPONSE_MIN = 120;
 
 // ─── 1. Business Features ──────────────────────────────────────────────────
 
@@ -255,9 +268,9 @@ export function extractCommunicationPatterns(messages: GHLMessage[]): Communicat
     };
   }
 
-  const sorted = [...messages].sort(
-    (a, b) => new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime(),
-  );
+  const sorted = [...messages]
+    .filter((m) => Number.isFinite(msOf(m.dateAdded)))
+    .sort((a, b) => msOf(a.dateAdded) - msOf(b.dateAdded));
 
   // Basic counts
   // Only count actual message types (WhatsApp, Email, Call), filter system messages
@@ -268,18 +281,22 @@ export function extractCommunicationPatterns(messages: GHLMessage[]): Communicat
   const outbound = realMessages.filter((m) => m.direction === 'outbound');
   const totalMessages = realMessages.length;
 
-  // Response times: for each inbound followed by outbound
+  // Response times: tiempo hasta la PRIMERA respuesta del equipo por cada ráfaga
+  // inbound. Recorre la conversación en orden: al primer inbound sin contestar
+  // abre un pendiente; el siguiente outbound lo cierra y registra el gap. Así
+  // varios inbounds seguidos no inflan la muestra (antes cada inbound matcheaba
+  // el mismo outbound). Se descartan gaps ≤0 (timestamps sucios/idénticos) y
+  // outliers > MAX_RESPONSE_MIN (re-enganche, no respuesta).
   const responseTimes: number[] = [];
+  let pendingInboundMs: number | null = null;
   for (const msg of realMessages) {
-    if (msg.direction === 'outbound') continue;
-    const inboundTime = new Date(msg.dateAdded).getTime();
-    // Find next outbound after this inbound
-    const nextOutbound = realMessages.find(
-      (m) => m.direction === 'outbound' && new Date(m.dateAdded).getTime() > inboundTime,
-    );
-    if (nextOutbound) {
-      const respMinutes = (new Date(nextOutbound.dateAdded).getTime() - inboundTime) / (1000 * 60);
-      responseTimes.push(respMinutes);
+    const t = msOf(msg.dateAdded);
+    if (msg.direction === 'inbound') {
+      if (pendingInboundMs === null) pendingInboundMs = t;
+    } else if (pendingInboundMs !== null) {
+      const respMinutes = (t - pendingInboundMs) / (1000 * 60);
+      if (respMinutes > 0 && respMinutes <= MAX_RESPONSE_MIN) responseTimes.push(respMinutes);
+      pendingInboundMs = null;
     }
   }
 
@@ -481,24 +498,30 @@ export function computeSuccessThresholds(
   const avgTimeToClose = Math.round(ttcs.reduce((s, v) => s + v, 0) / n);
   const medianTimeToClose = Math.round(median(ttcs));
 
-  // Response times (from conversations, not system messages)
-  const allResponseTimes = patterns.flatMap((p) => {
-    // We store median/avg per deal in the pattern; aggregate across deals
-    return p.avgResponseMinutes > 0 ? [p.avgResponseMinutes] : [];
-  });
-  const avgResponseMinutes =
-    allResponseTimes.length > 0
-      ? Math.round(allResponseTimes.reduce((s, v) => s + v, 0) / allResponseTimes.length)
-      : 0;
-  const medianResponseMinutes =
-    allResponseTimes.length > 0
-      ? Math.round(median([...allResponseTimes].sort((a, b) => a - b)))
-      : 0;
+  // Response times: cada deal aporta su MEDIANA (robusta a outliers intra-deal),
+  // ya saneada en extractCommunicationPatterns. Sobre esas medianas calculamos
+  // percentiles entre deals — no promedios crudos ni multiplicadores mágicos.
+  const perDealMedians = patterns
+    .map((p) => p.medianResponseMinutes)
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b);
+  const hasResponseData = perDealMedians.length > 0;
 
-  // Danger threshold: 2x the median response time
-  const dangerResponseThreshold = avgResponseMinutes > 0 ? avgResponseMinutes * 2 : 120;
-  // Ideal: median response time
-  const idealResponseThreshold = avgResponseMinutes > 0 ? Math.round(avgResponseMinutes * 0.7) : 30;
+  const avgResponseMinutes = hasResponseData ? Math.round(mean(perDealMedians)) : 0;
+  const medianResponseMinutes = hasResponseData ? Math.round(median(perDealMedians)) : 0;
+
+  // Ideal = mediana de medianas (p50), acotada a un rango defendible.
+  // Peligro = p90 entre deals, acotado, y siempre claramente por encima del ideal.
+  const idealResponseThreshold = hasResponseData
+    ? clamp(medianResponseMinutes, IDEAL_RESPONSE_FLOOR_MIN, IDEAL_RESPONSE_CAP_MIN)
+    : DEFAULT_IDEAL_RESPONSE_MIN;
+  const dangerResponseThreshold = hasResponseData
+    ? clamp(
+        Math.max(Math.round(percentile(perDealMedians, 0.9)), idealResponseThreshold * 2),
+        DANGER_RESPONSE_FLOOR_MIN,
+        DANGER_RESPONSE_CAP_MIN,
+      )
+    : DEFAULT_DANGER_RESPONSE_MIN;
 
   // Engagement
   const avgMessagesPerDeal = Math.round(patterns.reduce((s, p) => s + p.totalMessages, 0) / n);

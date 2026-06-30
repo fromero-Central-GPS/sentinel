@@ -14,18 +14,15 @@
  * conectado al MCP de GHL (prod-ghl-mcp).
  */
 
+import type { CanonicalMessage } from './types';
+import type { FunnelStage, LossReason } from './taxonomy';
+
+export type { FunnelStage };
+
 // ─── Tipos de entrada (datos crudos de GHL MCP) ───────────────────────────
 
-export interface GHLMessage {
-  id: string;
-  direction: 'inbound' | 'outbound';
-  body: string;
-  messageType: string;
-  dateAdded: string;
-  contentType?: string;
-  source?: string;
-  meta?: Record<string, unknown>;
-}
+/** @deprecated Usar `CanonicalMessage` de `./types`. Alias de compatibilidad. */
+export type GHLMessage = CanonicalMessage;
 
 export interface GHLConversationInput {
   id: string;
@@ -60,25 +57,8 @@ export interface GHLOpportunityInput {
 
 // ─── Tipos de salida (resultados del análisis) ────────────────────────────
 
-export type LossReasonCategory =
-  | 'sin_seguimiento'
-  | 'precio'
-  | 'competidor'
-  | 'producto_no_disponible'
-  | 'falta_informacion'
-  | 'proceso_complejo'
-  | 'cliente_explorando'
-  | 'desconocido';
-
-export type FunnelStage =
-  | 'consulta_inicial'
-  | 'cotizacion'
-  | 'demo_plataforma'
-  | 'negociacion'
-  | 'cierre'
-  | 'seguimiento'
-  | 'perdido'
-  | 'ganado';
+/** Razón de pérdida = vocabulario compartido (`./taxonomy`). */
+export type LossReasonCategory = LossReason;
 
 export type RecoverabilityPriority = 'urgent' | 'high' | 'medium' | 'low';
 

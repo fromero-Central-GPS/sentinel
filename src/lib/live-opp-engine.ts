@@ -11,6 +11,10 @@
  */
 
 import type { SuccessThresholds } from './won-track-engine';
+import type { CanonicalMessage } from './types';
+import type { RiskSeverity, RiskSignal } from './taxonomy';
+
+export type { RiskSeverity };
 
 // ─── Default Thresholds ─────────────────────────────────────────────────────
 
@@ -41,15 +45,8 @@ export function getDefaultThresholds(): SuccessThresholds {
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
-export interface GHLMessage {
-  id: string;
-  direction: 'inbound' | 'outbound';
-  body: string;
-  dateAdded: string;
-  messageType: string;
-  status?: string;
-  attachments?: Array<{ url: string }>;
-}
+/** @deprecated Usar `CanonicalMessage` de `./types`. Alias de compatibilidad. */
+export type GHLMessage = CanonicalMessage;
 
 export interface OpenOpportunity {
   id: string;
@@ -79,14 +76,8 @@ export interface OpenOpportunity {
   }>;
 }
 
-export type RiskSeverity = 'critical' | 'high' | 'medium' | 'low' | 'none';
-export type RiskCategory =
-  | 'no_response' // client waiting for response
-  | 'stalling' // no activity for too long
-  | 'low_engagement' // client not engaging enough
-  | 'slow_response' // team responding too slowly
-  | 'deal_decay' // deal open longer than benchmark
-  | 'competitor_risk'; // client mentioned competitor
+/** Categoría de riesgo = señal de riesgo del vocabulario compartido. */
+export type RiskCategory = RiskSignal;
 
 export interface RiskAlert {
   category: RiskCategory;

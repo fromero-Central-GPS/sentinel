@@ -7,44 +7,16 @@ import { decrypt } from '@/lib/encryption';
 import { enforceMotorAccess, incrementUsage } from '@/lib/plan-enforcement';
 import { fetchOpportunities, fetchMessagesForContact } from '@/lib/ghl-client';
 import type { RawOpportunity, RawMessage } from '@/lib/ghl-client';
+import { toDeal, toMessages } from '@/lib/types';
 import {
   analyzeWonDeal,
   generateWonTrackOutput,
-  type GHLOpportunity,
-  type GHLMessage,
   type WonTrackOutput,
 } from '@/lib/won-track-engine';
 import { saveTenantThresholds } from '@/lib/won-track-store';
 
 /** Cuántos deals ganados muestreamos para extraer patrones de conversación (acota llamadas a GHL). */
 const SAMPLE_SIZE = 20;
-
-// ─── Mapeo CRM crudo → tipo del motor ────────────────────────────────────
-
-function toEngineOpportunity(raw: RawOpportunity): GHLOpportunity {
-  return {
-    id: raw.id,
-    name: raw.name ?? raw.contact?.name ?? 'Desconocido',
-    monetaryValue: raw.monetaryValue ?? 0,
-    pipelineName: raw.pipeline?.name ?? raw.pipelineName ?? '',
-    pipelineStageName: raw.pipelineStage?.name ?? raw.pipelineStageName ?? '',
-    status: raw.status ?? 'won',
-    createdAt: raw.createdAt ?? raw.dateAdded ?? new Date().toISOString(),
-    updatedAt: raw.updatedAt ?? raw.lastStageChangeAt ?? new Date().toISOString(),
-    contactId: raw.contact?.id ?? raw.contactId ?? raw.id,
-    contact: {
-      id: raw.contact?.id ?? raw.contactId ?? raw.id,
-      name: raw.contact?.name ?? raw.name ?? 'Desconocido',
-      companyName: raw.contact?.companyName ?? null,
-      email: raw.contact?.email,
-      phone: raw.contact?.phone,
-      tags: raw.contact?.tags,
-      score: raw.contact?.score,
-    },
-    customFields: raw.customFields,
-    attributions: raw.attributions,
-  };
-}
 
 // ─── Construcción de la respuesta para el frontend ────────────────────────
 
@@ -155,7 +127,7 @@ function buildMock() {
   ];
 
   const deals = wonOpps.map((raw) =>
-    analyzeWonDeal(toEngineOpportunity(raw), mkMsgs(raw.id) as GHLMessage[]),
+    analyzeWonDeal(toDeal(raw, 'won'), toMessages(mkMsgs(raw.id))),
   );
   const output = generateWonTrackOutput(
     deals,
@@ -219,8 +191,8 @@ export async function GET(request: Request) {
 
     const deals = await Promise.all(
       sample.map(async (raw) => {
-        const opp = toEngineOpportunity(raw);
-        const messages = (await fetchMessagesForContact(creds, opp.contactId)) as GHLMessage[];
+        const opp = toDeal(raw, 'won');
+        const messages = toMessages(await fetchMessagesForContact(creds, opp.contactId));
         return analyzeWonDeal(opp, messages);
       }),
     );
