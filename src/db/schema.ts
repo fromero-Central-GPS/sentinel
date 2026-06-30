@@ -37,6 +37,10 @@ export const appSettings = pgTable('app_settings', {
   // GHL credentials (AES-256-GCM encrypted)
   ghlApiToken: text('ghl_api_token'),
   ghlLocationId: text('ghl_location_id'),
+  // IDs de custom fields de GHL por tenant (mapeo configurable para Won Track).
+  // Si son null, el motor cae a sus defaults (ver DEFAULT_FIELD_MAP).
+  ghlFieldPlan: text('ghl_field_plan'),
+  ghlFieldEquipos: text('ghl_field_equipos'),
   // Meta / WhatsApp Business credentials (AES-256-GCM encrypted)
   metaWabaId: text('meta_waba_id'),
   metaPhoneNumberId: text('meta_phone_number_id'),

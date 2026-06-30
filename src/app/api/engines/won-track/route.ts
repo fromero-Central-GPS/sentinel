@@ -12,6 +12,7 @@ import {
   analyzeWonDeal,
   generateWonTrackOutput,
   type WonTrackOutput,
+  type CustomFieldMap,
 } from '@/lib/won-track-engine';
 import { saveTenantThresholds } from '@/lib/won-track-store';
 
@@ -170,6 +171,11 @@ export async function GET(request: Request) {
   if (enforcement.blocked) return enforcement.response!;
 
   const creds = { token: decrypt(row.ghlApiToken), locationId: row.ghlLocationId };
+  // Mapeo de custom fields del tenant; null en BD → el motor usa sus defaults.
+  const fieldMap: CustomFieldMap = {
+    plan: row.ghlFieldPlan ?? undefined,
+    equipos: row.ghlFieldEquipos ?? undefined,
+  };
 
   try {
     // Conteos para la tasa de conversión (baratos: solo metadatos).
@@ -193,7 +199,7 @@ export async function GET(request: Request) {
       sample.map(async (raw) => {
         const opp = toDeal(raw, 'won');
         const messages = toMessages(await fetchMessagesForContact(creds, opp.contactId));
-        return analyzeWonDeal(opp, messages);
+        return analyzeWonDeal(opp, messages, fieldMap);
       }),
     );
 

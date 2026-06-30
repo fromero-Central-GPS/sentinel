@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   extractCommunicationPatterns,
+  extractBusinessFeatures,
   analyzeWonDeal,
   generateWonTrackOutput,
+  DEFAULT_FIELD_MAP,
 } from '../won-track-engine';
 import type { CanonicalMessage, Deal } from '../types';
 
@@ -84,6 +86,42 @@ describe('extractCommunicationPatterns — saneamiento de tiempos de respuesta',
     ];
     const p = extractCommunicationPatterns(messages);
     expect(p.medianResponseMinutes).toBe(20);
+  });
+});
+
+describe('extractBusinessFeatures — custom fields configurables por tenant', () => {
+  const dealWithFields = (planId: string, equiposId: string): Deal => ({
+    ...baseDeal('CF'),
+    customFields: [
+      { id: planId, fieldValueString: 'Pro Anual', type: 'TEXT' },
+      { id: equiposId, fieldValueNumber: 7, type: 'NUMERICAL' },
+    ],
+  });
+
+  it('lee los custom fields según el fieldMap del tenant', () => {
+    const f = extractBusinessFeatures(dealWithFields('tenantPlan', 'tenantEquipos'), {
+      plan: 'tenantPlan',
+      equipos: 'tenantEquipos',
+    });
+    expect(f.planType).toBe('Pro Anual');
+    expect(f.planCategory).toBe('anual');
+    expect(f.equipmentCount).toBe(7);
+  });
+
+  it('cae a los IDs default (CentralGPS) cuando no hay mapeo', () => {
+    const f = extractBusinessFeatures(
+      dealWithFields(DEFAULT_FIELD_MAP.plan!, DEFAULT_FIELD_MAP.equipos!),
+    );
+    expect(f.planType).toBe('Pro Anual');
+    expect(f.equipmentCount).toBe(7);
+  });
+
+  it('resuelve por-campo: un mapa parcial usa el default en lo que falte', () => {
+    const f = extractBusinessFeatures(dealWithFields('tenantPlan', DEFAULT_FIELD_MAP.equipos!), {
+      plan: 'tenantPlan',
+    });
+    expect(f.planType).toBe('Pro Anual'); // del mapa
+    expect(f.equipmentCount).toBe(7); // del default
   });
 });
 

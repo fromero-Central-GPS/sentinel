@@ -107,13 +107,33 @@ export interface BusinessFeatures {
   stageAtWin: string;
 }
 
-const FIELD_PLAN = 'GGjdMKQ53tRNd8oGLzGu';
-const FIELD_EQUIPOS = 'yFxYOya6JEfZeA69R63D';
+/**
+ * Mapeo de IDs de custom fields de GHL → significado de negocio. Es por tenant
+ * (cada cuenta GHL tiene IDs distintos). Se persiste en `appSettings` y la ruta
+ * lo inyecta; los defaults son los de CentralGPS para no romper su análisis.
+ */
+export interface CustomFieldMap {
+  plan?: string;
+  equipos?: string;
+}
 
-export function extractBusinessFeatures(opp: GHLOpportunity): BusinessFeatures {
+/** Defaults de CentralGPS — override por tenant vía `appSettings.ghlField*`. */
+export const DEFAULT_FIELD_MAP: CustomFieldMap = {
+  plan: 'GGjdMKQ53tRNd8oGLzGu',
+  equipos: 'yFxYOya6JEfZeA69R63D',
+};
+
+export function extractBusinessFeatures(
+  opp: GHLOpportunity,
+  fieldMap: CustomFieldMap = DEFAULT_FIELD_MAP,
+): BusinessFeatures {
+  // Resolución por-campo: un mapa parcial cae al default en lo que falte.
+  const planFieldId = fieldMap.plan ?? DEFAULT_FIELD_MAP.plan;
+  const equiposFieldId = fieldMap.equipos ?? DEFAULT_FIELD_MAP.equipos;
+
   // Plan type
   const planType =
-    opp.customFields?.find((f) => f.id === FIELD_PLAN)?.fieldValueString ?? 'desconocido';
+    opp.customFields?.find((f) => f.id === planFieldId)?.fieldValueString ?? 'desconocido';
   const planCategory: BusinessFeatures['planCategory'] = planType.toLowerCase().includes('anual')
     ? 'anual'
     : planType.toLowerCase().includes('mensual')
@@ -121,7 +141,7 @@ export function extractBusinessFeatures(opp: GHLOpportunity): BusinessFeatures {
       : 'desconocido';
 
   // Equipment count
-  const equipRaw = opp.customFields?.find((f) => f.id === FIELD_EQUIPOS)?.fieldValueNumber;
+  const equipRaw = opp.customFields?.find((f) => f.id === equiposFieldId)?.fieldValueNumber;
   const equipmentCount = equipRaw ?? 0;
 
   // Fleet size from tags
@@ -599,8 +619,12 @@ export interface WonTrackOutput {
   thresholds: SuccessThresholds;
 }
 
-export function analyzeWonDeal(opp: GHLOpportunity, messages: GHLMessage[]): WonDealAnalysis {
-  const features = extractBusinessFeatures(opp);
+export function analyzeWonDeal(
+  opp: GHLOpportunity,
+  messages: GHLMessage[],
+  fieldMap: CustomFieldMap = DEFAULT_FIELD_MAP,
+): WonDealAnalysis {
+  const features = extractBusinessFeatures(opp, fieldMap);
   const patterns = extractCommunicationPatterns(messages);
 
   // Generate winning formula
