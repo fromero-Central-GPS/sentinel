@@ -266,7 +266,9 @@ export function analyzeLiveOpportunity(
 
   // 1. Client waiting for response (CRITICAL)
   if (lastInbound && hoursSinceLastInbound !== null) {
-    if (lastOutbound && lastInbound > lastOutbound) {
+    // El cliente está esperando si su último mensaje es posterior al último
+    // outbound, O si nunca hubo outbound (jamás se le respondió).
+    if (!lastOutbound || lastInbound > lastOutbound) {
       // Client sent last message, no response yet
       if (hoursSinceLastInbound >= 1) {
         const sev: RiskSeverity = hoursSinceLastInbound >= 4 ? 'critical' : 'high';

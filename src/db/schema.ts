@@ -82,6 +82,19 @@ export const subscriptions = pgTable('subscriptions', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// ─── Won Track thresholds (blueprint que alimenta Live Opp) ──────────────
+
+export const wonTrackThresholds = pgTable('won_track_thresholds', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  // Clerk org id (mismo criterio de tenant que appSettings.tenantId)
+  tenantId: text('tenant_id').notNull().unique(),
+  // SuccessThresholds serializado (JSON). Lo consume Live Opp.
+  thresholds: text('thresholds').notNull(),
+  sampleSize: text('sample_size').notNull().default('0'),
+  computedAt: timestamp('computed_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // ─── Usage tracking ─────────────────────────────────────────────────────
 
 export const usageLog = pgTable('usage_log', {

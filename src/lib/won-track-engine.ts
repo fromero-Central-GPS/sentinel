@@ -56,6 +56,16 @@ export interface GHLOpportunity {
   }>;
 }
 
+// ─── Utilidades ─────────────────────────────────────────────────────────────
+
+/** Mediana correcta: promedia los dos centrales en arrays de longitud par. */
+function median(sortedAsc: number[]): number {
+  const n = sortedAsc.length;
+  if (n === 0) return 0;
+  const mid = Math.floor(n / 2);
+  return n % 2 === 0 ? (sortedAsc[mid - 1] + sortedAsc[mid]) / 2 : sortedAsc[mid];
+}
+
 // ─── 1. Business Features ──────────────────────────────────────────────────
 
 export interface BusinessFeatures {
@@ -99,11 +109,7 @@ export function extractBusinessFeatures(opp: GHLOpportunity): BusinessFeatures {
 
   // Equipment count
   const equipRaw = opp.customFields?.find((f) => f.id === FIELD_EQUIPOS)?.fieldValueNumber;
-  const equipmentCount =
-    equipRaw ??
-    (Array.isArray(opp.customFields?.find((f) => f.id === FIELD_EQUIPOS)?.fieldValueNumber)
-      ? 0
-      : 0);
+  const equipmentCount = equipRaw ?? 0;
 
   // Fleet size from tags
   const tags = opp.contact.tags ?? [];
@@ -282,8 +288,7 @@ export function extractCommunicationPatterns(messages: GHLMessage[]): Communicat
     responseTimes.length > 0
       ? Math.round(responseTimes.reduce((s, v) => s + v, 0) / responseTimes.length)
       : 0;
-  const medianResponseMinutes =
-    sortedRT.length > 0 ? Math.round(sortedRT[Math.floor(sortedRT.length / 2)]) : 0;
+  const medianResponseMinutes = sortedRT.length > 0 ? Math.round(median(sortedRT)) : 0;
 
   // Activity window
   const firstDate = new Date(sorted[0].dateAdded);
@@ -474,7 +479,7 @@ export function computeSuccessThresholds(
   // Time to close
   const ttcs = features.map((f) => f.timeToClose).sort((a, b) => a - b);
   const avgTimeToClose = Math.round(ttcs.reduce((s, v) => s + v, 0) / n);
-  const medianTimeToClose = ttcs[Math.floor(n / 2)];
+  const medianTimeToClose = Math.round(median(ttcs));
 
   // Response times (from conversations, not system messages)
   const allResponseTimes = patterns.flatMap((p) => {
@@ -484,6 +489,10 @@ export function computeSuccessThresholds(
   const avgResponseMinutes =
     allResponseTimes.length > 0
       ? Math.round(allResponseTimes.reduce((s, v) => s + v, 0) / allResponseTimes.length)
+      : 0;
+  const medianResponseMinutes =
+    allResponseTimes.length > 0
+      ? Math.round(median([...allResponseTimes].sort((a, b) => a - b)))
       : 0;
 
   // Danger threshold: 2x the median response time
@@ -513,7 +522,7 @@ export function computeSuccessThresholds(
   // Contract value
   const values = features.map((f) => f.contractValue).sort((a, b) => a - b);
   const avgContractValue = Math.round(values.reduce((s, v) => s + v, 0) / n);
-  const medianContractValue = values[Math.floor(n / 2)];
+  const medianContractValue = Math.round(median(values));
 
   // Value by fleet size
   const fleetValues: Record<string, number[]> = {};
@@ -531,7 +540,7 @@ export function computeSuccessThresholds(
     medianTimeToClose,
     fastCloseThreshold: Math.max(1, Math.round(medianTimeToClose * 0.5)),
     avgResponseMinutes,
-    medianResponseMinutes: avgResponseMinutes,
+    medianResponseMinutes,
     dangerResponseThreshold,
     idealResponseThreshold,
     avgMessagesPerDeal,

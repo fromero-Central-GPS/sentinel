@@ -10,10 +10,12 @@ import {
   incrementUsage,
 } from '@/lib/plan-enforcement';
 import { analyzeLiveOpportunity, getDefaultThresholds } from '@/lib/live-opp-engine';
-import type { OpenOpportunity } from '@/lib/live-opp-engine';
+import type { OpenOpportunity, GHLMessage } from '@/lib/live-opp-engine';
+import { fetchOpportunities, fetchMessagesForContact } from '@/lib/ghl-client';
+import { getTenantThresholds } from '@/lib/won-track-store';
 
-const GHL_BASE = 'https://services.leadconnectorhq.com';
-const GHL_VERSION = '2021-07-28';
+/** Para acotar llamadas a GHL, solo traemos mensajes de las N oportunidades de mayor valor. */
+const MESSAGE_FETCH_LIMIT = 25;
 
 export async function GET(request: Request) {
   const { orgId } = await auth();
@@ -119,34 +121,38 @@ export async function GET(request: Request) {
   const enforcement = await enforceMotorAccess('liveOpp');
   if (enforcement.blocked) return enforcement.response!;
 
-  const token = decrypt(row.ghlApiToken);
-  const locationId = row.ghlLocationId;
-  const headers = { Authorization: `Bearer ${token}`, Version: GHL_VERSION };
+  const creds = { token: decrypt(row.ghlApiToken), locationId: row.ghlLocationId };
 
   // Fetch open opportunities
-  const oppsRes = await fetch(
-    `${GHL_BASE}/opportunities/search?location_id=${locationId}&status=open&limit=50`,
-    { headers },
-  );
-  if (!oppsRes.ok) {
-    const text = await oppsRes.text();
-    return NextResponse.json({ error: `GHL error: ${oppsRes.status} ${text}` }, { status: 502 });
+  let rawOpps;
+  try {
+    rawOpps = await fetchOpportunities(creds, 'open', 50);
+  } catch (err) {
+    return NextResponse.json({ error: `GHL error: ${String(err)}` }, { status: 502 });
   }
-
-  const oppsData = await oppsRes.json();
-  const rawOpps = (oppsData.opportunities ?? oppsData.data ?? []) as GHLRawOpportunity[];
 
   // Check conversation limit before processing
   const limitCheck = await enforceConversationLimit(rawOpps.length);
   if (limitCheck.blocked) return limitCheck.response!;
 
-  const thresholds = getDefaultThresholds();
+  // Usa el blueprint real del tenant (Won Track); si nunca corrió, cae a defaults.
+  const thresholds = (await getTenantThresholds(orgId)) ?? getDefaultThresholds();
+
+  // Solo traemos mensajes para las oportunidades de mayor valor (acota llamadas a GHL).
+  const fetchMessagesFor = new Set(
+    [...rawOpps]
+      .sort((a, b) => (b.monetaryValue ?? 0) - (a.monetaryValue ?? 0))
+      .slice(0, MESSAGE_FETCH_LIMIT)
+      .map((o) => o.id),
+  );
+
   const analyzedOpps = [];
 
   for (const opp of rawOpps) {
     // Normalize opp data into an OpenOpportunity for the engine
     const contactName = opp.contact?.name ?? opp.name ?? 'Desconocido';
     const now = new Date().toISOString();
+    const contactId = opp.contact?.id ?? opp.contactId ?? '';
 
     const normalizedOpp: OpenOpportunity = {
       id: opp.id,
@@ -157,9 +163,9 @@ export async function GET(request: Request) {
       status: 'open',
       createdAt: opp.createdAt ?? opp.dateAdded ?? now,
       updatedAt: opp.updatedAt ?? opp.lastStageChangeAt ?? now,
-      contactId: opp.contact?.id ?? opp.contactId ?? '',
+      contactId,
       contact: {
-        id: opp.contact?.id ?? opp.contactId ?? '',
+        id: contactId,
         name: contactName,
         companyName: opp.contact?.companyName ?? null,
         email: opp.contact?.email,
@@ -168,9 +174,14 @@ export async function GET(request: Request) {
       },
     };
 
-    // For MVP we pass empty messages to avoid per-opportunity API calls.
-    // The engine still produces useful risk signals from the opportunity data alone.
-    const analysis = analyzeLiveOpportunity(normalizedOpp, [], thresholds);
+    // Traemos mensajes reales para las oportunidades prioritarias; el resto se
+    // evalúa con señales derivadas de la oportunidad (fechas/etapa).
+    const messages =
+      fetchMessagesFor.has(opp.id) && contactId
+        ? ((await fetchMessagesForContact(creds, contactId)) as GHLMessage[])
+        : [];
+
+    const analysis = analyzeLiveOpportunity(normalizedOpp, messages, thresholds);
     if (analysis.riskLevel !== 'none') {
       analyzedOpps.push(analysis);
     }
@@ -199,26 +210,3 @@ export async function GET(request: Request) {
     _meta: { mode: 'live' },
   });
 }
-
-type GHLRawOpportunity = {
-  id: string;
-  name?: string;
-  contact?: {
-    id?: string;
-    name?: string;
-    companyName?: string;
-    email?: string;
-    phone?: string;
-    tags?: string[];
-  };
-  contactId?: string;
-  monetaryValue?: number;
-  pipeline?: { name?: string };
-  pipelineName?: string;
-  pipelineStage?: { name?: string };
-  pipelineStageName?: string;
-  lastStageChangeAt?: string;
-  dateAdded?: string;
-  createdAt?: string;
-  updatedAt?: string;
-};
