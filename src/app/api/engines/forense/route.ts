@@ -20,9 +20,12 @@ import {
   type GHLOpportunityInput,
   type GHLMessage,
 } from '@/lib/analysis-engine';
-
-const GHL_BASE = 'https://services.leadconnectorhq.com';
-const GHL_VERSION = '2021-07-28';
+import {
+  fetchOpportunities,
+  fetchConversationIdByContact,
+  fetchConversationMessages,
+} from '@/lib/ghl-client';
+import { toMessages } from '@/lib/types';
 
 // ─── Mock data for demo mode ─────────────────────────────────────────────
 
@@ -170,59 +173,6 @@ function runForensicsPipeline(conversations: GHLConversationInput[], opps: GHLOp
   return generateBatchSummary(analyses, opps[0]?.pipelineId ?? 'demo-pipeline', 'Sentinel');
 }
 
-// ─── GHL API helpers ─────────────────────────────────────────────────────
-
-async function fetchGhlLostOpportunities(token: string, locationId: string, limit = 20) {
-  const url = `${GHL_BASE}/opportunities/search?location_id=${locationId}&status=lost&limit=${limit}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION },
-  });
-  if (!res.ok) throw new Error(`GHL opportunities error: ${res.status}`);
-  const data = (await res.json()) as { opportunities?: unknown[] };
-  return (data.opportunities ?? []) as GHLRawOpportunity[];
-}
-
-async function fetchGhlConversationIdByContact(
-  token: string,
-  locationId: string,
-  contactId: string,
-): Promise<string | null> {
-  const url = `${GHL_BASE}/conversations/search?locationId=${locationId}&contactId=${contactId}&limit=1`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION },
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { conversations?: Array<{ id: string }> };
-  return data.conversations?.[0]?.id ?? null;
-}
-
-async function fetchGhlConversationMessages(
-  token: string,
-  conversationId: string,
-): Promise<GHLMessage[]> {
-  const url = `${GHL_BASE}/conversations/${conversationId}/messages?limit=50`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION },
-  });
-  if (!res.ok) return [];
-  const data = (await res.json()) as {
-    messages?: Array<{
-      id: string;
-      direction: string;
-      body: string;
-      messageType: string;
-      dateAdded: string;
-    }>;
-  };
-  return (data.messages ?? []).map((m) => ({
-    id: m.id,
-    direction: m.direction as 'inbound' | 'outbound',
-    body: m.body ?? '',
-    messageType: m.messageType,
-    dateAdded: m.dateAdded,
-  }));
-}
-
 // ─── Route handler ────────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
@@ -299,9 +249,10 @@ export async function GET(request: Request) {
 
     const token = decrypt(row.ghlApiToken);
     const locationId = row.ghlLocationId;
+    const creds = { token, locationId };
 
     try {
-      const rawOpps = await fetchGhlLostOpportunities(token, locationId, 20);
+      const rawOpps = await fetchOpportunities(creds, 'lost', 20);
 
       if (rawOpps.length === 0) {
         return NextResponse.json({
@@ -334,12 +285,12 @@ export async function GET(request: Request) {
           let conversationId = opp.conversationId ?? null;
           let convIdSource = 'opp_direct';
           if (!conversationId && contactId) {
-            conversationId = await fetchGhlConversationIdByContact(token, locationId, contactId);
+            conversationId = await fetchConversationIdByContact(creds, contactId);
             convIdSource = conversationId ? 'contact_lookup' : 'not_found';
           }
 
-          const messages = conversationId
-            ? await fetchGhlConversationMessages(token, conversationId)
+          const messages: GHLMessage[] = conversationId
+            ? toMessages(await fetchConversationMessages(creds, conversationId))
             : [];
 
           debugPerOpp.push({
@@ -414,17 +365,3 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ error: `Unknown mode: ${mode}` }, { status: 400 });
 }
-
-type GHLRawOpportunity = {
-  id: string;
-  name?: string;
-  contact?: { id?: string; name?: string };
-  monetaryValue?: number;
-  pipelineId?: string;
-  pipelineStageId?: string;
-  pipelineStageName?: string;
-  lastStageChangeAt?: string;
-  createdAt?: string;
-  dateAdded?: string;
-  conversationId?: string;
-};

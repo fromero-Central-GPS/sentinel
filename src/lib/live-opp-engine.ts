@@ -11,7 +11,7 @@
  */
 
 import type { SuccessThresholds } from './won-track-engine';
-import type { CanonicalMessage } from './types';
+import type { CanonicalMessage, Deal } from './types';
 import type { RiskSeverity, RiskSignal } from './taxonomy';
 
 export type { RiskSeverity };
@@ -47,34 +47,8 @@ export function getDefaultThresholds(): SuccessThresholds {
 
 /** @deprecated Usar `CanonicalMessage` de `./types`. Alias de compatibilidad. */
 export type GHLMessage = CanonicalMessage;
-
-export interface OpenOpportunity {
-  id: string;
-  name: string;
-  monetaryValue: number;
-  pipelineName: string;
-  pipelineStageName: string;
-  status: 'open';
-  createdAt: string;
-  updatedAt: string;
-  contactId: string;
-  /** ID del usuario GHL asignado (vendedor responsable) — CEN-1000 */
-  assignedTo?: string;
-  contact: {
-    id: string;
-    name: string;
-    companyName?: string | null;
-    email?: string;
-    phone?: string;
-    tags?: string[];
-  };
-  customFields?: Array<{
-    id: string;
-    fieldValueString?: string;
-    fieldValueNumber?: number;
-    type: string;
-  }>;
-}
+/** @deprecated Usar `Deal` de `./types`. Alias de compatibilidad. */
+export type OpenOpportunity = Deal;
 
 /** Categoría de riesgo = señal de riesgo del vocabulario compartido. */
 export type RiskCategory = RiskSignal;

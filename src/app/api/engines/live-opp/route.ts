@@ -10,8 +10,9 @@ import {
   incrementUsage,
 } from '@/lib/plan-enforcement';
 import { analyzeLiveOpportunity, getDefaultThresholds } from '@/lib/live-opp-engine';
-import type { OpenOpportunity, GHLMessage } from '@/lib/live-opp-engine';
+import type { OpenOpportunity } from '@/lib/live-opp-engine';
 import { fetchOpportunities, fetchMessagesForContact } from '@/lib/ghl-client';
+import { toDeal, toMessages } from '@/lib/types';
 import { getTenantThresholds } from '@/lib/won-track-store';
 
 /** Para acotar llamadas a GHL, solo traemos mensajes de las N oportunidades de mayor valor. */
@@ -149,39 +150,16 @@ export async function GET(request: Request) {
   const analyzedOpps = [];
 
   for (const opp of rawOpps) {
-    // Normalize opp data into an OpenOpportunity for the engine
-    const contactName = opp.contact?.name ?? opp.name ?? 'Desconocido';
-    const now = new Date().toISOString();
-    const contactId = opp.contact?.id ?? opp.contactId ?? '';
-
-    const normalizedOpp: OpenOpportunity = {
-      id: opp.id,
-      name: opp.name ?? contactName,
-      monetaryValue: opp.monetaryValue ?? 0,
-      pipelineName: opp.pipeline?.name ?? opp.pipelineName ?? '',
-      pipelineStageName: opp.pipelineStage?.name ?? opp.pipelineStageName ?? '',
-      status: 'open',
-      createdAt: opp.createdAt ?? opp.dateAdded ?? now,
-      updatedAt: opp.updatedAt ?? opp.lastStageChangeAt ?? now,
-      contactId,
-      contact: {
-        id: contactId,
-        name: contactName,
-        companyName: opp.contact?.companyName ?? null,
-        email: opp.contact?.email,
-        phone: opp.contact?.phone,
-        tags: opp.contact?.tags,
-      },
-    };
+    const deal = toDeal(opp, 'open');
 
     // Traemos mensajes reales para las oportunidades prioritarias; el resto se
     // evalúa con señales derivadas de la oportunidad (fechas/etapa).
     const messages =
-      fetchMessagesFor.has(opp.id) && contactId
-        ? ((await fetchMessagesForContact(creds, contactId)) as GHLMessage[])
+      fetchMessagesFor.has(opp.id) && deal.contactId
+        ? toMessages(await fetchMessagesForContact(creds, deal.contactId))
         : [];
 
-    const analysis = analyzeLiveOpportunity(normalizedOpp, messages, thresholds);
+    const analysis = analyzeLiveOpportunity(deal, messages, thresholds);
     if (analysis.riskLevel !== 'none') {
       analyzedOpps.push(analysis);
     }
