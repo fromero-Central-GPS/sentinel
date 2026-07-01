@@ -123,17 +123,21 @@ export async function fetchConversationMessages(
 ): Promise<RawMessage[]> {
   const res = await ghlFetch(`/conversations/${conversationId}/messages?limit=${limit}`, token);
   if (!res.ok) return [];
-  const data = (await res.json()) as {
-    messages?: Array<{
-      id: string;
-      direction: string;
-      body?: string;
-      messageType: string;
-      dateAdded: string;
-      attachments?: Array<{ url: string }>;
-    }>;
+  // GHL anida la lista: { messages: { messages: [...] } }. Algunos endpoints/mocks
+  // la devuelven plana, así que aceptamos ambas formas.
+  type RawGhlMessage = {
+    id: string;
+    direction: string;
+    body?: string;
+    messageType: string;
+    dateAdded: string;
+    attachments?: Array<{ url: string }>;
   };
-  return (data.messages ?? []).map((m) => ({
+  const data = (await res.json()) as {
+    messages?: { messages?: RawGhlMessage[] } | RawGhlMessage[];
+  };
+  const list = Array.isArray(data.messages) ? data.messages : (data.messages?.messages ?? []);
+  return list.map((m) => ({
     id: m.id,
     direction: m.direction === 'outbound' ? 'outbound' : 'inbound',
     body: m.body ?? '',
