@@ -26,6 +26,7 @@ import {
   fetchConversationMessages,
 } from '@/lib/ghl-client';
 import { toMessages } from '@/lib/types';
+import { diagnoseLossReasonLLM } from '@/lib/forense-llm';
 
 // ─── Mock data for demo mode ─────────────────────────────────────────────
 
@@ -142,34 +143,44 @@ function buildMockConversations(): GHLConversationInput[] {
   ];
 }
 
-function runForensicsPipeline(conversations: GHLConversationInput[], opps: GHLOpportunityInput[]) {
-  const analyses = conversations.map((conv, i) => {
-    const opp = opps[i];
-    const abandonment = detectAbandonment(conv.messages || [], conv.lastMessageDate);
-    const intentSignals = detectPurchaseIntent(conv.messages || []);
-    const stageClassification = classifyFunnelStage(conv.messages || [], opp.pipelineStageName);
-    const lossReason = diagnoseLossReason(conv.messages || [], 'lost', abandonment);
-    const recoverability = scoreRecoverability(
-      opp.monetaryValue,
-      abandonment,
-      intentSignals,
-      conv.messages || [],
-    );
-    return {
-      conversationId: conv.id,
-      contactId: conv.contactId,
-      contactName: conv.contactName,
-      opportunityId: opp.id,
-      opportunityValue: opp.monetaryValue,
-      channel: 'GHL',
-      intentSignals,
-      stageClassification,
-      abandonment,
-      lossReason,
-      recoverability,
-      analyzedAt: new Date().toISOString(),
-    };
-  });
+async function runForensicsPipeline(
+  conversations: GHLConversationInput[],
+  opps: GHLOpportunityInput[],
+  useLLM = false,
+) {
+  const analyses = await Promise.all(
+    conversations.map(async (conv, i) => {
+      const opp = opps[i];
+      const messages = conv.messages || [];
+      const abandonment = detectAbandonment(messages, conv.lastMessageDate);
+      const intentSignals = detectPurchaseIntent(messages);
+      const stageClassification = classifyFunnelStage(messages, opp.pipelineStageName);
+      // Fase 2: LLM primero (razón de pérdida), con fallback determinista a regex.
+      const lossReason =
+        (useLLM ? await diagnoseLossReasonLLM(messages) : null) ??
+        diagnoseLossReason(messages, 'lost', abandonment);
+      const recoverability = scoreRecoverability(
+        opp.monetaryValue,
+        abandonment,
+        intentSignals,
+        messages,
+      );
+      return {
+        conversationId: conv.id,
+        contactId: conv.contactId,
+        contactName: conv.contactName,
+        opportunityId: opp.id,
+        opportunityValue: opp.monetaryValue,
+        channel: 'GHL',
+        intentSignals,
+        stageClassification,
+        abandonment,
+        lossReason,
+        recoverability,
+        analyzedAt: new Date().toISOString(),
+      };
+    }),
+  );
   return generateBatchSummary(analyses, opps[0]?.pipelineId ?? 'demo-pipeline', 'Sentinel');
 }
 
@@ -215,7 +226,7 @@ export async function GET(request: Request) {
       },
     ];
 
-    const batchResult = runForensicsPipeline(conversations, opps);
+    const batchResult = await runForensicsPipeline(conversations, opps);
 
     return NextResponse.json({
       batchResult,
@@ -338,7 +349,7 @@ export async function GET(request: Request) {
         createdAt: opp.createdAt ?? opp.dateAdded ?? new Date().toISOString(),
       }));
 
-      const batchResult = runForensicsPipeline(conversations, opps);
+      const batchResult = await runForensicsPipeline(conversations, opps, true);
 
       // Track usage
       await incrementUsage('forense', conversations.length);
