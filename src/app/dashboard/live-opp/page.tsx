@@ -62,9 +62,12 @@ export default function LiveOppPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [mode, setMode] = useState<'live' | 'mock'>('live');
 
   useEffect(() => {
-    fetch('/api/engines/live-opp')
+    setLoading(true);
+    setError(null);
+    fetch(`/api/engines/live-opp?mode=${mode}`)
       .then((r) => r.json())
       .then((d: LiveOppData) => {
         if (d.error) throw new Error(d.error);
@@ -72,9 +75,9 @@ export default function LiveOppPage() {
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [mode]);
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="p-8 flex items-center justify-center min-h-64">
         <div className="text-sm text-zinc-500 animate-pulse">Cargando oportunidades en riesgo…</div>
@@ -86,7 +89,15 @@ export default function LiveOppPage() {
     const isNoCredentials = error.includes('not configured');
     return (
       <div className="p-8 space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Live Opp</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Live Opp</h1>
+          <button
+            onClick={() => setMode(mode === 'live' ? 'mock' : 'live')}
+            className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 hover:bg-zinc-50"
+          >
+            Modo: {mode}
+          </button>
+        </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center space-y-3">
           <p className="font-semibold text-amber-800">
             {isNoCredentials ? 'Credenciales GHL no configuradas' : 'Error al cargar datos'}
@@ -111,11 +122,19 @@ export default function LiveOppPage() {
 
   return (
     <div className="p-6 md:p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Live Opp</h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Oportunidades abiertas sin actividad — ordenadas por riesgo
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Live Opp</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Oportunidades abiertas sin actividad — ordenadas por riesgo
+          </p>
+        </div>
+        <button
+          onClick={() => setMode(mode === 'live' ? 'mock' : 'live')}
+          className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 hover:bg-zinc-50"
+        >
+          Modo: {mode}
+        </button>
       </div>
 
       {/* KPIs */}
