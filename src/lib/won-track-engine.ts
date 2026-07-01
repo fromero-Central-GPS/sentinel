@@ -11,6 +11,7 @@
  */
 
 import type { CanonicalMessage, Deal } from './types';
+import type { WinFactor } from './taxonomy';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -608,7 +609,9 @@ export interface WonDealAnalysis {
   contactName: string;
   features: BusinessFeatures;
   patterns: CommunicationPatterns;
-  winningFormula: string[]; // human-readable list of what worked
+  /** Contrato estable (códigos de taxonomy.WIN_FACTORS) que Live Opp comparará. */
+  factors: WinFactor[];
+  winningFormula: string[]; // human-readable list of what worked (misma fuente que factors)
 }
 
 export interface WonTrackOutput {
@@ -617,6 +620,8 @@ export interface WonTrackOutput {
   totalWonValue: number;
   deals: WonDealAnalysis[];
   thresholds: SuccessThresholds;
+  /** Narrativa "playbook" generada por LLM (Fase 2). undefined si el LLM no corrió. */
+  playbookSummary?: string;
 }
 
 export function analyzeWonDeal(
@@ -627,49 +632,57 @@ export function analyzeWonDeal(
   const features = extractBusinessFeatures(opp, fieldMap);
   const patterns = extractCommunicationPatterns(messages);
 
-  // Generate winning formula
+  // Fuente única: cada condición numérica cumplida aporta un código de taxonomía
+  // (contrato para Live Opp) + su etiqueta legible. Los números viven en código;
+  // el LLM solo agrega la narrativa agregada (playbookSummary).
+  const factors: WinFactor[] = [];
   const formula: string[] = [];
+  const add = (factor: WinFactor, label: string) => {
+    factors.push(factor);
+    formula.push(label);
+  };
 
   if (features.closeSpeed === 'instantaneo' || features.closeSpeed === 'rapido') {
-    formula.push(`Cierre ${features.closeSpeed} (${features.timeToClose}d)`);
+    add('fast_close', `Cierre ${features.closeSpeed} (${features.timeToClose}d)`);
   }
   if (patterns.avgResponseMinutes <= 60) {
-    formula.push(`Respuesta rápida (promedio ${patterns.avgResponseMinutes}min)`);
+    add('fast_response', `Respuesta rápida (promedio ${patterns.avgResponseMinutes}min)`);
   }
   if (patterns.inboundRatio >= 0.4) {
-    formula.push(
+    add(
+      'high_engagement',
       `Alto engagement del cliente (${Math.round(patterns.inboundRatio * 100)}% inbound)`,
     );
   }
   if (patterns.hasVoiceNotes) {
-    formula.push('Cliente envió notas de voz (alto compromiso)');
+    add('voice_notes', 'Cliente envió notas de voz (alto compromiso)');
   }
   if (patterns.hasEmailThread) {
-    formula.push('Comunicación multi-canal (WhatsApp + Email)');
+    add('multichannel', 'Comunicación multi-canal (WhatsApp + Email)');
   }
   if (patterns.paymentMentioned && patterns.clientSentDocuments) {
-    formula.push('Cliente proactivo con documentos y pago');
+    add('proactive_client', 'Cliente proactivo con documentos y pago');
   }
   if (features.channelCategory === 'whatsapp') {
-    formula.push('Canal WhatsApp (respuesta rápida)');
+    add('preferred_channel', 'Canal WhatsApp (respuesta rápida)');
   }
   if (features.planCategory === 'anual') {
-    formula.push(`Plan anual (${features.planType}) — mayor retención`);
+    add('annual_plan', `Plan anual (${features.planType}) — mayor retención`);
   }
   if (features.equipmentCount >= 3) {
-    formula.push(`Multi-equipo (${features.equipmentCount}) — potencial upsell`);
+    add('multi_equipment', `Multi-equipo (${features.equipmentCount}) — potencial upsell`);
   }
   if (patterns.questionCount >= 3) {
-    formula.push(`Cliente hizo ${patterns.questionCount} preguntas — alta intención`);
+    add('high_intent', `Cliente hizo ${patterns.questionCount} preguntas — alta intención`);
   }
   if (patterns.positiveLanguageCount >= 2) {
-    formula.push(`Lenguaje positivo (${patterns.positiveLanguageCount} expresiones)`);
+    add('positive_language', `Lenguaje positivo (${patterns.positiveLanguageCount} expresiones)`);
   }
   if (patterns.integrationMentioned) {
-    formula.push('Requerimiento de integración satisfecho');
+    add('integration_fit', 'Requerimiento de integración satisfecho');
   }
   if (features.leadScore >= 20) {
-    formula.push(`Lead score alto (${features.leadScore}) al entrar`);
+    add('high_lead_score', `Lead score alto (${features.leadScore}) al entrar`);
   }
 
   return {
@@ -677,6 +690,7 @@ export function analyzeWonDeal(
     contactName: opp.contact.name,
     features,
     patterns,
+    factors,
     winningFormula: formula.length > 0 ? formula : ['Análisis insuficiente — revisar manualmente'],
   };
 }

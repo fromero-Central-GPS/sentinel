@@ -14,6 +14,7 @@ import {
   type WonTrackOutput,
   type CustomFieldMap,
 } from '@/lib/won-track-engine';
+import { summarizeWinningPlaybookLLM } from '@/lib/wontrack-llm';
 import { saveTenantThresholds } from '@/lib/won-track-store';
 
 /** Cuántos deals ganados muestreamos para extraer patrones de conversación (acota llamadas a GHL). */
@@ -43,6 +44,15 @@ function buildResponse(
 ) {
   const { thresholds } = output;
   const conversionRate = total > 0 ? wonCount / total : 0;
+
+  // Agrega los factores de éxito (códigos de taxonomía) entre los deals analizados.
+  const factorCounts: Record<string, number> = {};
+  for (const deal of output.deals) {
+    for (const f of deal.factors) factorCounts[f] = (factorCounts[f] ?? 0) + 1;
+  }
+  const topWinFactors = Object.entries(factorCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([factor, count]) => ({ factor, count }));
 
   const alerts: { type: string; message: string }[] = [];
   if (thresholds.sampleSize === 0) {
@@ -76,6 +86,8 @@ function buildResponse(
       medianResponseMinutes: thresholds.medianResponseMinutes,
       avgInboundRatio: thresholds.avgInboundRatio,
     },
+    topWinFactors,
+    playbookSummary: output.playbookSummary ?? null,
   };
 }
 
@@ -212,6 +224,9 @@ export async function GET(request: Request) {
     // Persistir el blueprint → lo consume Live Opp.
     await saveTenantThresholds(orgId, output.thresholds);
     await incrementUsage('wonTrack', deals.length);
+
+    // Fase 2: narrativa playbook por LLM (1 llamada; null si LLM off → se omite).
+    output.playbookSummary = (await summarizeWinningPlaybookLLM(output)) ?? undefined;
 
     const avgTicket = Math.round(
       wonRaw.reduce((s, o) => s + (o.monetaryValue ?? 0), 0) / wonRaw.length,

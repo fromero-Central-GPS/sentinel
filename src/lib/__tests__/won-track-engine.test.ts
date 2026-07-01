@@ -125,6 +125,23 @@ describe('extractBusinessFeatures — custom fields configurables por tenant', (
   });
 });
 
+describe('analyzeWonDeal — factors (contrato WIN_FACTORS) 1:1 con winningFormula', () => {
+  it('emite códigos de taxonomía derivados de las señales numéricas', () => {
+    const deal: Deal = {
+      ...baseDeal('WF'),
+      updatedAt: iso(3 * 24 * 60), // cierre en 3d → fast_close
+      contact: { id: 'c', name: 'Acme', tags: ['10 a 49 vehículos'] },
+      attributions: [{ utmSessionSource: 'whatsapp', isFirst: true }], // preferred_channel
+    };
+    const d = analyzeWonDeal(deal, [msg('inbound', 0), msg('outbound', 5)]); // fast_response
+    expect(d.factors).toContain('fast_close');
+    expect(d.factors).toContain('fast_response');
+    expect(d.factors).toContain('preferred_channel');
+    // factors y winningFormula salen de la misma fuente → misma longitud.
+    expect(d.factors).toHaveLength(d.winningFormula.length);
+  });
+});
+
 describe('computeSuccessThresholds — thresholds acotados (regresión bug CentralGPS)', () => {
   it('clampa ideal/peligro aunque un deal tenga una mediana enorme', () => {
     // Medianas por deal: 15, 45, 2000 (33h, como el bug real, pero < 3 días).
