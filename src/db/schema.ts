@@ -41,6 +41,10 @@ export const appSettings = pgTable('app_settings', {
   // Si son null, el motor cae a sus defaults (ver DEFAULT_FIELD_MAP).
   ghlFieldPlan: text('ghl_field_plan'),
   ghlFieldEquipos: text('ghl_field_equipos'),
+  // Config de IA por tenant (tier). Si son null → default de plataforma + OIDC.
+  aiType: text('ai_type'), // proveedor/tier: deepseek | anthropic | openai | custom
+  aiModel: text('ai_model'), // slug del AI Gateway, ej: deepseek/deepseek-v3.2
+  aiApiKey: text('ai_api_key'), // AI Gateway API key (BYOK), AES-256-GCM encrypted
   // Meta / WhatsApp Business credentials (AES-256-GCM encrypted)
   metaWabaId: text('meta_waba_id'),
   metaPhoneNumberId: text('meta_phone_number_id'),

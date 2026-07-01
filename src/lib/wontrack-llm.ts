@@ -10,7 +10,7 @@
  */
 
 import { z } from 'zod';
-import { generateStructured } from './llm';
+import { generateStructured, type LLMAuth } from './llm';
 import type { WinFactor } from './taxonomy';
 import type { WonTrackOutput } from './won-track-engine';
 
@@ -34,7 +34,10 @@ function tallyFactors(output: WonTrackOutput): Array<[WinFactor, number]> {
 /**
  * Genera la narrativa playbook. `null` si no hay deals o el LLM no está disponible.
  */
-export async function summarizeWinningPlaybookLLM(output: WonTrackOutput): Promise<string | null> {
+export async function summarizeWinningPlaybookLLM(
+  output: WonTrackOutput,
+  auth?: LLMAuth,
+): Promise<string | null> {
   if (output.deals.length === 0) return null;
 
   const t = output.thresholds;
@@ -53,6 +56,12 @@ Benchmarks:
 - Canal top: ${t.topChannel}
 - Plan más vendido: ${t.topPlan}`;
 
-  const result = await generateStructured({ schema, system: SYSTEM, prompt });
+  const result = await generateStructured({
+    schema,
+    system: SYSTEM,
+    prompt,
+    model: auth?.model,
+    apiKey: auth?.apiKey,
+  });
   return result?.summary ?? null;
 }

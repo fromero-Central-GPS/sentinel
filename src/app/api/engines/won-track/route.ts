@@ -15,6 +15,7 @@ import {
   type CustomFieldMap,
 } from '@/lib/won-track-engine';
 import { summarizeWinningPlaybookLLM } from '@/lib/wontrack-llm';
+import { getTenantAIConfig } from '@/lib/ai-config';
 import { saveTenantThresholds } from '@/lib/won-track-store';
 
 /** Cuántos deals ganados muestreamos para extraer patrones de conversación (acota llamadas a GHL). */
@@ -226,7 +227,8 @@ export async function GET(request: Request) {
     await incrementUsage('wonTrack', deals.length);
 
     // Fase 2: narrativa playbook por LLM (1 llamada; null si LLM off → se omite).
-    output.playbookSummary = (await summarizeWinningPlaybookLLM(output)) ?? undefined;
+    const aiConfig = await getTenantAIConfig(orgId);
+    output.playbookSummary = (await summarizeWinningPlaybookLLM(output, aiConfig)) ?? undefined;
 
     const avgTicket = Math.round(
       wonRaw.reduce((s, o) => s + (o.monetaryValue ?? 0), 0) / wonRaw.length,

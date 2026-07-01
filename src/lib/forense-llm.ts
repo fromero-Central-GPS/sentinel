@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { generateStructured } from './llm';
+import { generateStructured, type LLMAuth } from './llm';
 import { LOSS_REASONS, type LossReason } from './taxonomy';
 import type { CanonicalMessage } from './types';
 import type { LossReasonDiagnosis } from './analysis-engine';
@@ -49,6 +49,7 @@ Reglas:
  */
 export async function diagnoseLossReasonLLM(
   messages: CanonicalMessage[],
+  auth?: LLMAuth,
 ): Promise<LossReasonDiagnosis | null> {
   const realMessages = messages.filter(
     (m) => !m.messageType?.startsWith('TYPE_ACTIVITY') && (m.body?.trim().length ?? 0) > 0,
@@ -65,5 +66,7 @@ export async function diagnoseLossReasonLLM(
     schema,
     system: SYSTEM,
     prompt: `Conversación de la oportunidad perdida:\n\n${transcript}`,
+    model: auth?.model,
+    apiKey: auth?.apiKey,
   });
 }

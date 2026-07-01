@@ -27,6 +27,7 @@ import {
 } from '@/lib/ghl-client';
 import { toMessages } from '@/lib/types';
 import { diagnoseLossReasonLLM } from '@/lib/forense-llm';
+import { getTenantAIConfig, type TenantAIConfig } from '@/lib/ai-config';
 
 // ─── Mock data for demo mode ─────────────────────────────────────────────
 
@@ -146,7 +147,7 @@ function buildMockConversations(): GHLConversationInput[] {
 async function runForensicsPipeline(
   conversations: GHLConversationInput[],
   opps: GHLOpportunityInput[],
-  useLLM = false,
+  ai?: TenantAIConfig | null,
 ) {
   const analyses = await Promise.all(
     conversations.map(async (conv, i) => {
@@ -157,7 +158,7 @@ async function runForensicsPipeline(
       const stageClassification = classifyFunnelStage(messages, opp.pipelineStageName);
       // Fase 2: LLM primero (razón de pérdida), con fallback determinista a regex.
       const lossReason =
-        (useLLM ? await diagnoseLossReasonLLM(messages) : null) ??
+        (ai ? await diagnoseLossReasonLLM(messages, ai) : null) ??
         diagnoseLossReason(messages, 'lost', abandonment);
       const recoverability = scoreRecoverability(
         opp.monetaryValue,
@@ -349,7 +350,11 @@ export async function GET(request: Request) {
         createdAt: opp.createdAt ?? opp.dateAdded ?? new Date().toISOString(),
       }));
 
-      const batchResult = await runForensicsPipeline(conversations, opps, true);
+      const batchResult = await runForensicsPipeline(
+        conversations,
+        opps,
+        await getTenantAIConfig(orgId),
+      );
 
       // Track usage
       await incrementUsage('forense', conversations.length);
