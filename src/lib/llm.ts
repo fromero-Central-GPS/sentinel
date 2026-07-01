@@ -15,8 +15,13 @@
 import { generateObject } from 'ai';
 import type { z } from 'zod';
 
-/** Modelo por defecto (override por env para tiers altos). */
-export const LLM_MODEL = process.env.SENTINEL_LLM_MODEL ?? 'deepseek/deepseek-chat';
+/**
+ * Modelo por defecto (override por env `SENTINEL_LLM_MODEL` para tiers altos).
+ * `deepseek/deepseek-v3.2`: barato y accesible en el free tier del AI Gateway
+ * (validado end-to-end con generateObject). OJO: los slugs usan puntos, no
+ * guiones, y `deepseek-chat`/`v4-flash` NO están disponibles en free tier.
+ */
+export const LLM_MODEL = process.env.SENTINEL_LLM_MODEL ?? 'deepseek/deepseek-v3.2';
 
 /**
  * ¿Hay forma de autenticar contra el AI Gateway?
