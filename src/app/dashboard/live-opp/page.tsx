@@ -5,6 +5,8 @@ import { Fragment, useEffect, useState } from 'react';
 type Opportunity = {
   id: string;
   name: string;
+  comentarios?: string;
+  owner?: string | null;
   stage: string;
   daysSinceActivity: number;
   riskScore: number;
@@ -192,6 +194,9 @@ export default function LiveOppPage() {
                     Etapa
                   </th>
                   <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">
+                    Dueño
+                  </th>
+                  <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">
                     Valor
                   </th>
                   <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide"></th>
@@ -207,7 +212,17 @@ export default function LiveOppPage() {
                         className={`cursor-pointer transition-colors ${isExpanded ? 'bg-zinc-50' : 'hover:bg-zinc-50'}`}
                         onClick={() => setExpandedId(isExpanded ? null : opp.id)}
                       >
-                        <td className="py-3 px-4 text-sm font-medium text-zinc-900">{opp.name}</td>
+                        <td className="py-3 px-4">
+                          <div className="text-sm font-medium text-zinc-900">{opp.name}</div>
+                          {opp.comentarios && (
+                            <div
+                              className="text-xs text-zinc-500 mt-0.5 max-w-[22rem] truncate"
+                              title={opp.comentarios}
+                            >
+                              {opp.comentarios}
+                            </div>
+                          )}
+                        </td>
                         <td className="py-3 px-4">
                           <span
                             className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${rc.badge}`}
@@ -220,6 +235,7 @@ export default function LiveOppPage() {
                           {opp.daysSinceActivity}d
                         </td>
                         <td className="py-3 px-4 text-sm text-zinc-500">{opp.stage || '—'}</td>
+                        <td className="py-3 px-4 text-sm text-zinc-500">{opp.owner || '—'}</td>
                         <td className="py-3 px-4 text-sm text-zinc-700 font-mono">
                           {formatCLP(opp.value)}
                         </td>
@@ -229,7 +245,7 @@ export default function LiveOppPage() {
                       </tr>
                       {isExpanded && opp.recommendedActions.length > 0 && (
                         <tr className="bg-zinc-50">
-                          <td colSpan={6} className="px-4 pb-4 pt-0">
+                          <td colSpan={7} className="px-4 pb-4 pt-0">
                             <div className="space-y-1.5">
                               <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
                                 Acciones recomendadas

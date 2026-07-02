@@ -11,8 +11,14 @@ import {
 } from '@/lib/plan-enforcement';
 import { analyzeLiveOpportunity, getDefaultThresholds } from '@/lib/live-opp-engine';
 import type { OpenOpportunity } from '@/lib/live-opp-engine';
-import { fetchOpportunities, fetchMessagesForContact } from '@/lib/ghl-client';
+import {
+  fetchOpportunities,
+  fetchMessagesForContact,
+  fetchStageMap,
+  fetchUsers,
+} from '@/lib/ghl-client';
 import { toDeal, toMessages } from '@/lib/types';
+import { DEFAULT_FIELD_MAP } from '@/lib/won-track-engine';
 import { getTenantThresholds } from '@/lib/won-track-store';
 
 /** Para acotar llamadas a GHL, solo traemos mensajes de las N oportunidades de mayor valor. */
@@ -27,7 +33,11 @@ export async function GET(request: Request) {
 
   if (mode === 'mock') {
     const thresholds = getDefaultThresholds();
-    const analyzedOpps = [];
+    const analyzedOpps: Array<{
+      analysis: ReturnType<typeof analyzeLiveOpportunity>;
+      comentarios: string;
+      owner: string | null;
+    }> = [];
 
     const mockOpps: OpenOpportunity[] = [
       {
@@ -70,6 +80,16 @@ export async function GET(request: Request) {
       },
     ];
 
+    const mockComentarios: Record<string, string> = {
+      '1': 'Necesito rastrear 3 camiones, plan anual con reportes',
+      '2': 'Cotizar GPS para 1 vehículo, plan mensual',
+      '3': 'Flota de 8 vehículos, requiere integración con su ERP',
+    };
+    const mockOwners: Record<string, string> = {
+      user1: 'Berna Correa',
+      user2: 'Diego Riquelme',
+    };
+
     for (const opp of mockOpps) {
       const messages = [
         {
@@ -82,14 +102,20 @@ export async function GET(request: Request) {
       ];
       const analysis = analyzeLiveOpportunity(opp, messages, thresholds);
       if (analysis.riskLevel !== 'none') {
-        analyzedOpps.push(analysis);
+        analyzedOpps.push({
+          analysis,
+          comentarios: mockComentarios[opp.id] ?? opp.name,
+          owner: opp.assignedTo ? (mockOwners[opp.assignedTo] ?? null) : null,
+        });
       }
     }
 
     const mappedOpps = analyzedOpps
-      .map((a) => ({
+      .map(({ analysis: a, comentarios, owner }) => ({
         id: a.opportunityId,
         name: a.contactName || a.opportunityId,
+        comentarios,
+        owner,
         stage: a.stage,
         daysSinceActivity: a.daysSinceLastContact,
         riskScore: a.overallRiskScore,
@@ -137,7 +163,13 @@ export async function GET(request: Request) {
   if (limitCheck.blocked) return limitCheck.response!;
 
   // Usa el blueprint real del tenant (Won Track); si nunca corrió, cae a defaults.
-  const thresholds = (await getTenantThresholds(orgId)) ?? getDefaultThresholds();
+  // En paralelo: mapa de etapas (id→nombre) y de usuarios (id→nombre) para
+  // enriquecer cada oportunidad — GHL search no trae ni el nombre de etapa ni el dueño.
+  const [thresholds, stageMap, userMap] = await Promise.all([
+    getTenantThresholds(orgId).then((t) => t ?? getDefaultThresholds()),
+    fetchStageMap(creds),
+    fetchUsers(creds),
+  ]);
 
   // Solo traemos mensajes para las oportunidades de mayor valor (acota llamadas a GHL).
   const fetchMessagesFor = new Set(
@@ -147,10 +179,16 @@ export async function GET(request: Request) {
       .map((o) => o.id),
   );
 
-  const analyzedOpps = [];
+  const analyzedOpps: Array<{
+    analysis: ReturnType<typeof analyzeLiveOpportunity>;
+    comentarios: string;
+    owner: string | null;
+  }> = [];
 
   for (const opp of rawOpps) {
     const deal = toDeal(opp, 'open');
+    // Resuelve el nombre de la etapa (search solo trae el id).
+    deal.pipelineStageName = stageMap[opp.pipelineStageId ?? ''] ?? deal.pipelineStageName;
 
     // Traemos mensajes reales para las oportunidades prioritarias; el resto se
     // evalúa con señales derivadas de la oportunidad (fechas/etapa).
@@ -161,14 +199,27 @@ export async function GET(request: Request) {
 
     const analysis = analyzeLiveOpportunity(deal, messages, thresholds);
     if (analysis.riskLevel !== 'none') {
-      analyzedOpps.push(analysis);
+      // "Comentarios" (custom field de la oportunidad) = lo que el cliente cotiza.
+      const comentarios =
+        opp.customFields
+          ?.find((f) => f.id === DEFAULT_FIELD_MAP.comentarios)
+          ?.fieldValueString?.trim() ||
+        opp.name ||
+        '';
+      analyzedOpps.push({
+        analysis,
+        comentarios,
+        owner: deal.assignedTo ? (userMap[deal.assignedTo] ?? null) : null,
+      });
     }
   }
 
   const mappedOpps = analyzedOpps
-    .map((a) => ({
+    .map(({ analysis: a, comentarios, owner }) => ({
       id: a.opportunityId,
       name: a.contactName || a.opportunityId,
+      comentarios,
+      owner,
       stage: a.stage,
       daysSinceActivity: a.daysSinceLastContact,
       riskScore: a.overallRiskScore,

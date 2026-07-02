@@ -116,12 +116,15 @@ export interface BusinessFeatures {
 export interface CustomFieldMap {
   plan?: string;
   equipos?: string;
+  /** Custom field de oportunidad "Comentarios" (lo que el cliente cotiza). */
+  comentarios?: string;
 }
 
 /** Defaults de CentralGPS — override por tenant vía `appSettings.ghlField*`. */
 export const DEFAULT_FIELD_MAP: CustomFieldMap = {
   plan: 'GGjdMKQ53tRNd8oGLzGu',
   equipos: 'yFxYOya6JEfZeA69R63D',
+  comentarios: 'tPpr8KLntYIHydAUYPIr',
 };
 
 export function extractBusinessFeatures(

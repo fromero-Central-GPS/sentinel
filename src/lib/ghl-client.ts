@@ -27,6 +27,8 @@ export interface RawOpportunity {
   pipelineStageId?: string;
   pipelineStageName?: string;
   pipelineStage?: { name?: string };
+  /** ID del usuario GHL asignado (vendedor/dueño de la oportunidad). */
+  assignedTo?: string;
   lastStageChangeAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -159,6 +161,44 @@ export async function fetchMessagesForContact(
   const conversationId = await fetchConversationIdByContact(creds, contactId);
   if (!conversationId) return [];
   return fetchConversationMessages(creds, conversationId, limit);
+}
+
+/**
+ * Mapa `pipelineStageId → nombre de etapa`. GHL /opportunities/search NO devuelve
+ * el nombre de la etapa, solo el id; esto lo resuelve con un único llamado.
+ */
+export async function fetchStageMap({
+  token,
+  locationId,
+}: GhlCredentials): Promise<Record<string, string>> {
+  const res = await ghlFetch(`/opportunities/pipelines?locationId=${locationId}`, token);
+  if (!res.ok) return {};
+  const data = (await res.json()) as {
+    pipelines?: Array<{ stages?: Array<{ id: string; name: string }> }>;
+  };
+  const map: Record<string, string> = {};
+  for (const p of data.pipelines ?? []) {
+    for (const s of p.stages ?? []) map[s.id] = s.name;
+  }
+  return map;
+}
+
+/**
+ * Mapa `userId → nombre` de los usuarios de la location, para resolver el dueño
+ * (assignedTo) de cada oportunidad. Un único llamado por request.
+ */
+export async function fetchUsers({
+  token,
+  locationId,
+}: GhlCredentials): Promise<Record<string, string>> {
+  const res = await ghlFetch(`/users/?locationId=${locationId}`, token);
+  if (!res.ok) return {};
+  const data = (await res.json()) as {
+    users?: Array<{ id: string; name?: string; email?: string }>;
+  };
+  const map: Record<string, string> = {};
+  for (const u of data.users ?? []) map[u.id] = u.name || u.email || u.id;
+  return map;
 }
 
 /** Verifica credenciales contra el endpoint de location. */

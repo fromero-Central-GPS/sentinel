@@ -127,6 +127,7 @@ export function toDeal(raw: RawOpportunity, defaultStatus: DealStatus = 'open'):
     createdAt: raw.createdAt ?? raw.dateAdded ?? now,
     updatedAt: raw.updatedAt ?? raw.lastStageChangeAt ?? now,
     lastStageChangeAt: raw.lastStageChangeAt,
+    assignedTo: raw.assignedTo,
     contactId,
     contact: {
       id: contactId,
