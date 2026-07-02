@@ -35,6 +35,7 @@ export async function GET(request: Request) {
     const thresholds = getDefaultThresholds();
     const analyzedOpps: Array<{
       analysis: ReturnType<typeof analyzeLiveOpportunity>;
+      opportunityName: string;
       comentarios: string;
       owner: string | null;
     }> = [];
@@ -80,6 +81,11 @@ export async function GET(request: Request) {
       },
     ];
 
+    const mockDeal: Record<string, string> = {
+      '1': 'Plan Pro Anual x3 | Constructora Beta',
+      '2': 'Plan Lite Mensual x1 | Transportes Gamma',
+      '3': 'Plan Super Anual x8 | Logística Delta',
+    };
     const mockComentarios: Record<string, string> = {
       '1': 'Necesito rastrear 3 camiones, plan anual con reportes',
       '2': 'Cotizar GPS para 1 vehículo, plan mensual',
@@ -104,16 +110,18 @@ export async function GET(request: Request) {
       if (analysis.riskLevel !== 'none') {
         analyzedOpps.push({
           analysis,
-          comentarios: mockComentarios[opp.id] ?? opp.name,
+          opportunityName: mockDeal[opp.id] ?? opp.name,
+          comentarios: mockComentarios[opp.id] ?? '',
           owner: opp.assignedTo ? (mockOwners[opp.assignedTo] ?? null) : null,
         });
       }
     }
 
     const mappedOpps = analyzedOpps
-      .map(({ analysis: a, comentarios, owner }) => ({
+      .map(({ analysis: a, opportunityName, comentarios, owner }) => ({
         id: a.opportunityId,
         name: a.contactName || a.opportunityId,
+        opportunityName,
         comentarios,
         owner,
         stage: a.stage,
@@ -181,6 +189,7 @@ export async function GET(request: Request) {
 
   const analyzedOpps: Array<{
     analysis: ReturnType<typeof analyzeLiveOpportunity>;
+    opportunityName: string;
     comentarios: string;
     owner: string | null;
   }> = [];
@@ -203,11 +212,11 @@ export async function GET(request: Request) {
       const comentarios =
         opp.customFields
           ?.find((f) => f.id === DEFAULT_FIELD_MAP.comentarios)
-          ?.fieldValueString?.trim() ||
-        opp.name ||
-        '';
+          ?.fieldValueString?.trim() || '';
       analyzedOpps.push({
         analysis,
+        // Nombre del deal (ej "Plan Lite Anual x2 | TRANSMACO"), aparte del contacto.
+        opportunityName: opp.name ?? deal.name ?? '',
         comentarios,
         owner: deal.assignedTo ? (userMap[deal.assignedTo] ?? null) : null,
       });
@@ -215,9 +224,10 @@ export async function GET(request: Request) {
   }
 
   const mappedOpps = analyzedOpps
-    .map(({ analysis: a, comentarios, owner }) => ({
+    .map(({ analysis: a, opportunityName, comentarios, owner }) => ({
       id: a.opportunityId,
       name: a.contactName || a.opportunityId,
+      opportunityName,
       comentarios,
       owner,
       stage: a.stage,

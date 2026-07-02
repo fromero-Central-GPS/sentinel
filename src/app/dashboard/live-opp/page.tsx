@@ -5,6 +5,7 @@ import { Fragment, useEffect, useState } from 'react';
 type Opportunity = {
   id: string;
   name: string;
+  opportunityName?: string;
   comentarios?: string;
   owner?: string | null;
   stage: string;
@@ -214,9 +215,14 @@ export default function LiveOppPage() {
                       >
                         <td className="py-3 px-4">
                           <div className="text-sm font-medium text-zinc-900">{opp.name}</div>
+                          {opp.opportunityName && opp.opportunityName !== opp.name && (
+                            <div className="text-xs text-zinc-600 mt-0.5 max-w-[22rem] truncate">
+                              {opp.opportunityName}
+                            </div>
+                          )}
                           {opp.comentarios && (
                             <div
-                              className="text-xs text-zinc-500 mt-0.5 max-w-[22rem] truncate"
+                              className="text-xs text-zinc-400 mt-0.5 max-w-[22rem] truncate"
                               title={opp.comentarios}
                             >
                               {opp.comentarios}
