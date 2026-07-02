@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type {
   BatchAnalysisResult,
   ConversationAnalysis,
@@ -178,17 +178,35 @@ export default function ForensePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'mock'>('live');
+  const [runningAi, setRunningAi] = useState(false);
+  const [aiRan, setAiRan] = useState(false);
+
+  // withLLM=false en la carga automática (regex barato); el botón corre el LLM.
+  const load = useCallback(
+    (withLLM: boolean) => {
+      if (withLLM) setRunningAi(true);
+      else setLoading(true);
+      setError(null);
+      fetch(`/api/engines/forense?mode=${mode}${withLLM ? '&llm=true' : ''}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.error) throw new Error(d.detail ? `${d.error} — ${d.detail}` : d.error);
+          setData(d);
+          if (withLLM) setAiRan(true);
+        })
+        .catch((e) => setError(e.message))
+        .finally(() => {
+          setLoading(false);
+          setRunningAi(false);
+        });
+    },
+    [mode],
+  );
 
   useEffect(() => {
-    fetch(`/api/engines/forense?mode=${mode}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) throw new Error(d.detail ? `${d.error} — ${d.detail}` : d.error);
-        setData(d);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [mode]);
+    setAiRan(false);
+    load(false);
+  }, [load]);
 
   if (loading && !data) {
     return (
@@ -326,8 +344,29 @@ export default function ForensePage() {
               Demo
             </button>
           </div>
+          {mode === 'live' && (
+            <button
+              onClick={() => load(true)}
+              disabled={runningAi}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              title="Corre la clasificación de razón de pérdida con IA (consume tokens)"
+            >
+              {runningAi
+                ? 'Analizando con IA…'
+                : aiRan
+                  ? '↻ Re-correr IA'
+                  : '✨ Correr análisis IA'}
+            </button>
+          )}
         </div>
       </div>
+
+      {aiRan && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs text-indigo-800">
+          Razón de pérdida clasificada con IA. La carga automática usa el método rápido (regex);
+          apreta “Correr análisis IA” para re-clasificar con el modelo.
+        </div>
+      )}
 
       {_meta.mode === 'mock' && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">

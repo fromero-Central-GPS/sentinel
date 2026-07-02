@@ -193,6 +193,9 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const mode = searchParams.get('mode') || 'mock';
+  // El LLM (razón de pérdida) solo corre on-demand (?llm=true); por defecto usa el
+  // regex determinista para no quemar tokens en cada refresh.
+  const useLLM = searchParams.get('llm') === 'true';
 
   // ─── Mock mode: demo data, no GHL needed, no plan enforcement ──────────
 
@@ -353,7 +356,7 @@ export async function GET(request: Request) {
       const batchResult = await runForensicsPipeline(
         conversations,
         opps,
-        await getTenantAIConfig(orgId),
+        useLLM ? await getTenantAIConfig(orgId) : null,
       );
 
       // Track usage

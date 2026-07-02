@@ -162,7 +162,11 @@ export async function GET(request: Request) {
   const { orgId } = await auth();
   if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const mode = new URL(request.url).searchParams.get('mode') ?? 'mock';
+  const params = new URL(request.url).searchParams;
+  const mode = params.get('mode') ?? 'mock';
+  // El LLM (playbook) solo corre on-demand (?llm=true) para no quemar tokens en
+  // cada refresh de la pantalla.
+  const useLLM = params.get('llm') === 'true';
 
   if (mode === 'mock') {
     return NextResponse.json(buildMock());
@@ -226,9 +230,11 @@ export async function GET(request: Request) {
     await saveTenantThresholds(orgId, output.thresholds);
     await incrementUsage('wonTrack', deals.length);
 
-    // Fase 2: narrativa playbook por LLM (1 llamada; null si LLM off → se omite).
-    const aiConfig = await getTenantAIConfig(orgId);
-    output.playbookSummary = (await summarizeWinningPlaybookLLM(output, aiConfig)) ?? undefined;
+    // Fase 2: narrativa playbook por LLM — solo on-demand (?llm=true).
+    if (useLLM) {
+      const aiConfig = await getTenantAIConfig(orgId);
+      output.playbookSummary = (await summarizeWinningPlaybookLLM(output, aiConfig)) ?? undefined;
+    }
 
     const avgTicket = Math.round(
       wonRaw.reduce((s, o) => s + (o.monetaryValue ?? 0), 0) / wonRaw.length,

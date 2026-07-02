@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 type WonTrackData = {
   period: string;
@@ -46,17 +46,32 @@ export default function WonTrackPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'mock'>('live');
+  const [runningAi, setRunningAi] = useState(false);
+
+  // withLLM=false en la carga automática (barato); el botón lo dispara on-demand.
+  const load = useCallback(
+    (withLLM: boolean) => {
+      if (withLLM) setRunningAi(true);
+      else setLoading(true);
+      setError(null);
+      fetch(`/api/engines/won-track?mode=${mode}${withLLM ? '&llm=true' : ''}`)
+        .then((r) => r.json())
+        .then((d: WonTrackData) => {
+          if (d.error) throw new Error(d.error);
+          setData(d);
+        })
+        .catch((e: Error) => setError(e.message))
+        .finally(() => {
+          setLoading(false);
+          setRunningAi(false);
+        });
+    },
+    [mode],
+  );
 
   useEffect(() => {
-    fetch(`/api/engines/won-track?mode=${mode}`)
-      .then((r) => r.json())
-      .then((d: WonTrackData) => {
-        if (d.error) throw new Error(d.error);
-        setData(d);
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [mode]);
+    load(false);
+  }, [load]);
 
   if (loading && !data) {
     return (
@@ -135,6 +150,20 @@ export default function WonTrackPage() {
               Demo
             </button>
           </div>
+          {mode === 'live' && (
+            <button
+              onClick={() => load(true)}
+              disabled={runningAi}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              title="Corre el análisis con IA (consume tokens)"
+            >
+              {runningAi
+                ? 'Analizando con IA…'
+                : data?.playbookSummary
+                  ? '↻ Re-correr IA'
+                  : '✨ Correr análisis IA'}
+            </button>
+          )}
         </div>
       </div>
 
