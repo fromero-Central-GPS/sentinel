@@ -214,11 +214,11 @@ export default function LiveOppPage() {
                         onClick={() => setExpandedId(isExpanded ? null : opp.id)}
                       >
                         <td className="py-3 px-4">
-                          <div className="text-sm font-medium text-zinc-900">{opp.name}</div>
-                          {opp.opportunityName && opp.opportunityName !== opp.name && (
-                            <div className="text-xs text-zinc-600 mt-0.5 max-w-[22rem] truncate">
-                              {opp.opportunityName}
-                            </div>
+                          <div className="text-sm font-medium text-zinc-900 max-w-[22rem] truncate">
+                            {opp.opportunityName || opp.name}
+                          </div>
+                          {opp.opportunityName && opp.name && opp.name !== opp.opportunityName && (
+                            <div className="text-xs text-zinc-600 mt-0.5">{opp.name}</div>
                           )}
                           {opp.comentarios && (
                             <div
