@@ -16,6 +16,7 @@ import {
 } from '@/lib/won-track-engine';
 import { summarizeWinningPlaybookLLM } from '@/lib/wontrack-llm';
 import { getTenantAIConfig } from '@/lib/ai-config';
+import { getLlmAnalysis, saveLlmAnalysis } from '@/lib/llm-store';
 import { saveTenantThresholds } from '@/lib/won-track-store';
 
 /** Cuántos deals ganados muestreamos para extraer patrones de conversación (acota llamadas a GHL). */
@@ -89,6 +90,7 @@ function buildResponse(
     },
     topWinFactors,
     playbookSummary: output.playbookSummary ?? null,
+    playbookAnalyzedAt: output.playbookAnalyzedAt ?? null,
   };
 }
 
@@ -230,10 +232,24 @@ export async function GET(request: Request) {
     await saveTenantThresholds(orgId, output.thresholds);
     await incrementUsage('wonTrack', deals.length);
 
-    // Fase 2: narrativa playbook por LLM — solo on-demand (?llm=true).
+    // Fase 2: narrativa playbook por LLM.
     if (useLLM) {
+      // On-demand: corre el LLM y guarda el resultado en caché.
       const aiConfig = await getTenantAIConfig(orgId);
-      output.playbookSummary = (await summarizeWinningPlaybookLLM(output, aiConfig)) ?? undefined;
+      const summary = await summarizeWinningPlaybookLLM(output, aiConfig);
+      if (summary) {
+        output.playbookSummary = summary;
+        output.playbookAnalyzedAt = new Date().toISOString();
+        await saveLlmAnalysis(orgId, 'won_track', 'playbook', summary, aiConfig.model);
+      }
+    } else {
+      // Carga normal: muestra el último playbook guardado (0 tokens).
+      const cached = await getLlmAnalysis<string>(orgId, 'won_track');
+      const pb = cached.find((r) => r.key === 'playbook');
+      if (pb) {
+        output.playbookSummary = pb.payload;
+        output.playbookAnalyzedAt = pb.analyzedAt;
+      }
     }
 
     const avgTicket = Math.round(

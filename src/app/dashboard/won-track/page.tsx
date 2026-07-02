@@ -15,8 +15,20 @@ type WonTrackData = {
   businessFeatures?: any;
   communicationPatterns?: any;
   playbookSummary?: string | null;
+  playbookAnalyzedAt?: string | null;
   topWinFactors?: { factor: string; count: number }[];
 };
+
+function timeAgo(iso?: string | null): string {
+  if (!iso) return '';
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'recién';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `hace ${h}h`;
+  return `hace ${Math.floor(h / 24)}d`;
+}
 
 function formatCLP(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
@@ -70,7 +82,8 @@ export default function WonTrackPage() {
   );
 
   useEffect(() => {
-    load(false);
+    // Diferido para no llamar setState de forma síncrona dentro del effect.
+    queueMicrotask(() => load(false));
   }, [load]);
 
   if (loading && !data) {
@@ -230,6 +243,11 @@ export default function WonTrackPage() {
         <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-6">
           <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700 mb-2">
             Playbook de éxito · IA
+            {data.playbookAnalyzedAt && (
+              <span className="ml-2 font-normal normal-case text-indigo-400">
+                · analizado {timeAgo(data.playbookAnalyzedAt)}
+              </span>
+            )}
           </p>
           <p className="text-sm text-indigo-900 leading-relaxed whitespace-pre-line">
             {data.playbookSummary}

@@ -19,7 +19,9 @@ import {
   type GHLConversationInput,
   type GHLOpportunityInput,
   type GHLMessage,
+  type LossReasonDiagnosis,
 } from '@/lib/analysis-engine';
+import { getLlmAnalysis, saveLlmAnalysis } from '@/lib/llm-store';
 import {
   fetchOpportunities,
   fetchConversationIdByContact,
@@ -147,8 +149,10 @@ function buildMockConversations(): GHLConversationInput[] {
 async function runForensicsPipeline(
   conversations: GHLConversationInput[],
   opps: GHLOpportunityInput[],
-  ai?: TenantAIConfig | null,
+  opts?: { ai?: TenantAIConfig | null; cached?: Map<string, LossReasonDiagnosis> },
 ) {
+  const ai = opts?.ai;
+  const cached = opts?.cached;
   const analyses = await Promise.all(
     conversations.map(async (conv, i) => {
       const opp = opps[i];
@@ -156,9 +160,11 @@ async function runForensicsPipeline(
       const abandonment = detectAbandonment(messages, conv.lastMessageDate);
       const intentSignals = detectPurchaseIntent(messages);
       const stageClassification = classifyFunnelStage(messages, opp.pipelineStageName);
-      // Fase 2: LLM primero (razón de pérdida), con fallback determinista a regex.
+      // Razón de pérdida: si se pidió IA, corre el LLM; si no, usa el último análisis
+      // LLM cacheado para esa oportunidad; si tampoco hay, cae al regex determinista.
       const lossReason =
         (ai ? await diagnoseLossReasonLLM(messages, ai) : null) ??
+        cached?.get(opp.id) ??
         diagnoseLossReason(messages, 'lost', abandonment);
       const recoverability = scoreRecoverability(
         opp.monetaryValue,
@@ -353,11 +359,30 @@ export async function GET(request: Request) {
         createdAt: opp.createdAt ?? opp.dateAdded ?? new Date().toISOString(),
       }));
 
-      const batchResult = await runForensicsPipeline(
-        conversations,
-        opps,
-        useLLM ? await getTenantAIConfig(orgId) : null,
-      );
+      // Razón de pérdida: on-demand corre el LLM y cachea; carga normal usa el
+      // último análisis LLM guardado por oportunidad (0 tokens) + regex para las nuevas.
+      let batchResult;
+      let llmAnalyzedAt: string | null = null;
+      if (useLLM) {
+        const aiConfig = await getTenantAIConfig(orgId);
+        batchResult = await runForensicsPipeline(conversations, opps, { ai: aiConfig });
+        await Promise.all(
+          batchResult.conversations
+            .filter((c) => c.opportunityId)
+            .map((c) =>
+              saveLlmAnalysis(orgId, 'forense', c.opportunityId!, c.lossReason, aiConfig.model),
+            ),
+        );
+        llmAnalyzedAt = new Date().toISOString();
+      } else {
+        const cachedRecs = await getLlmAnalysis<LossReasonDiagnosis>(orgId, 'forense');
+        const cached = new Map(cachedRecs.map((r) => [r.key, r.payload]));
+        llmAnalyzedAt = cachedRecs.reduce<string | null>(
+          (max, r) => (!max || r.analyzedAt > max ? r.analyzedAt : max),
+          null,
+        );
+        batchResult = await runForensicsPipeline(conversations, opps, { cached });
+      }
 
       // Track usage
       await incrementUsage('forense', conversations.length);
@@ -366,8 +391,8 @@ export async function GET(request: Request) {
         batchResult,
         _meta: {
           mode: 'live',
-          codeVersion: '80e9e7a',
           analyzedAt: new Date().toISOString(),
+          llmAnalyzedAt,
           conversationCount: conversations.length,
           locationId,
           note: 'Datos reales desde GHL API del tenant.',

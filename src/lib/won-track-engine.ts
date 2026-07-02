@@ -625,6 +625,8 @@ export interface WonTrackOutput {
   thresholds: SuccessThresholds;
   /** Narrativa "playbook" generada por LLM (Fase 2). undefined si el LLM no corrió. */
   playbookSummary?: string;
+  /** Cuándo se generó el playbook (ISO). Presente si viene de caché o recién corrido. */
+  playbookAnalyzedAt?: string;
 }
 
 export function analyzeWonDeal(

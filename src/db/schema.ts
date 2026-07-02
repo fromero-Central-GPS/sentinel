@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, unique } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -118,3 +118,19 @@ export const usageLog = pgTable('usage_log', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// Caché del último análisis LLM por tenant (para no re-quemar tokens en cada
+// carga). engine: 'won_track' | 'forense'. key: 'playbook' o el opportunityId.
+export const llmAnalysis = pgTable(
+  'llm_analysis',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: text('tenant_id').notNull(),
+    engine: text('engine').notNull(),
+    key: text('key').notNull(),
+    payload: text('payload').notNull(), // JSON serializado
+    model: text('model'),
+    analyzedAt: timestamp('analyzed_at').defaultNow().notNull(),
+  },
+  (t) => [unique('llm_analysis_tenant_engine_key_unique').on(t.tenantId, t.engine, t.key)],
+);

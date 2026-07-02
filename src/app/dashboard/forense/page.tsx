@@ -13,12 +13,24 @@ type ForenseResponse = {
   _meta: {
     mode: 'live' | 'mock';
     analyzedAt: string;
+    llmAnalyzedAt?: string | null;
     note?: string;
     source?: string;
   };
   error?: string;
   detail?: string;
 };
+
+function timeAgo(iso?: string | null): string {
+  if (!iso) return '';
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'recién';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `hace ${h}h`;
+  return `hace ${Math.floor(h / 24)}d`;
+}
 
 const PRIORITY_CONFIG: Record<RecoverabilityPriority, { label: string; className: string }> = {
   urgent: { label: 'URGENTE', className: 'bg-red-100 text-red-700 ring-1 ring-red-200' },
@@ -179,9 +191,8 @@ export default function ForensePage() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'mock'>('live');
   const [runningAi, setRunningAi] = useState(false);
-  const [aiRan, setAiRan] = useState(false);
 
-  // withLLM=false en la carga automática (regex barato); el botón corre el LLM.
+  // withLLM=false en la carga automática (regex/caché barato); el botón corre el LLM.
   const load = useCallback(
     (withLLM: boolean) => {
       if (withLLM) setRunningAi(true);
@@ -192,7 +203,6 @@ export default function ForensePage() {
         .then((d) => {
           if (d.error) throw new Error(d.detail ? `${d.error} — ${d.detail}` : d.error);
           setData(d);
-          if (withLLM) setAiRan(true);
         })
         .catch((e) => setError(e.message))
         .finally(() => {
@@ -204,8 +214,8 @@ export default function ForensePage() {
   );
 
   useEffect(() => {
-    setAiRan(false);
-    load(false);
+    // Diferido para no llamar setState de forma síncrona dentro del effect.
+    queueMicrotask(() => load(false));
   }, [load]);
 
   if (loading && !data) {
@@ -353,7 +363,7 @@ export default function ForensePage() {
             >
               {runningAi
                 ? 'Analizando con IA…'
-                : aiRan
+                : data?._meta.llmAnalyzedAt
                   ? '↻ Re-correr IA'
                   : '✨ Correr análisis IA'}
             </button>
@@ -361,12 +371,18 @@ export default function ForensePage() {
         </div>
       </div>
 
-      {aiRan && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs text-indigo-800">
-          Razón de pérdida clasificada con IA. La carga automática usa el método rápido (regex);
-          apreta “Correr análisis IA” para re-clasificar con el modelo.
-        </div>
-      )}
+      {_meta.mode === 'live' &&
+        (_meta.llmAnalyzedAt ? (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs text-indigo-800">
+            Razón de pérdida por IA · último análisis {timeAgo(_meta.llmAnalyzedAt)}
+            {runningAi ? ' · actualizando…' : ' · apretá “Re-correr IA” para actualizar'}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-xs text-zinc-600">
+            Mostrando clasificación rápida (regex). Apretá “Correr análisis IA” para clasificar con
+            el modelo (se guarda para la próxima vez).
+          </div>
+        ))}
 
       {_meta.mode === 'mock' && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between">
