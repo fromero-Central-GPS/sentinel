@@ -5,7 +5,7 @@ import { appSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { decrypt } from '@/lib/encryption';
 import { enforceMotorAccess, incrementUsage } from '@/lib/plan-enforcement';
-import { fetchOpportunities, fetchMessagesForContact } from '@/lib/ghl-client';
+import { fetchOpportunities, fetchMessagesForContact, mapWithConcurrency } from '@/lib/ghl-client';
 import type { RawOpportunity, RawMessage } from '@/lib/ghl-client';
 import { toDeal, toMessages } from '@/lib/types';
 import {
@@ -214,13 +214,12 @@ export async function GET(request: Request) {
       .sort((a, b) => (b.monetaryValue ?? 0) - (a.monetaryValue ?? 0))
       .slice(0, SAMPLE_SIZE);
 
-    const deals = await Promise.all(
-      sample.map(async (raw) => {
-        const opp = toDeal(raw, 'won');
-        const messages = toMessages(await fetchMessagesForContact(creds, opp.contactId));
-        return analyzeWonDeal(opp, messages, fieldMap);
-      }),
-    );
+    // Concurrencia acotada para no reventar el rate limit de GHL (429).
+    const deals = await mapWithConcurrency(sample, 5, async (raw) => {
+      const opp = toDeal(raw, 'won');
+      const messages = toMessages(await fetchMessagesForContact(creds, opp.contactId));
+      return analyzeWonDeal(opp, messages, fieldMap);
+    });
 
     const output = generateWonTrackOutput(
       deals,

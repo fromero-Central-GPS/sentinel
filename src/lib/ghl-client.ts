@@ -77,12 +77,41 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}`, Version: GHL_VERSION };
 }
 
+/** Reintenta ante 429 (rate limit) con backoff, respetando Retry-After si viene. */
 async function ghlFetch(path: string, token: string, timeoutMs = DEFAULT_TIMEOUT_MS) {
-  const res = await fetch(`${GHL_BASE}${path}`, {
-    headers: authHeaders(token),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  return res;
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${GHL_BASE}${path}`, {
+      headers: authHeaders(token),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (res.status !== 429 || attempt >= MAX_RETRIES) return res;
+    const retryAfter = Number(res.headers.get('retry-after'));
+    const waitMs =
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 600 * 2 ** attempt;
+    await new Promise((r) => setTimeout(r, Math.min(waitMs, 8000)));
+  }
+}
+
+/**
+ * map con concurrencia acotada — evita reventar el rate limit de GHL cuando hay
+ * que traer datos de muchas oportunidades. Preserva el orden de `items`.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 /** Lista oportunidades por estado (open/won/lost). Devuelve [] ante error de red controlado. */

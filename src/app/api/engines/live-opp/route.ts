@@ -16,6 +16,7 @@ import {
   fetchMessagesForContact,
   fetchStageMap,
   fetchUsers,
+  mapWithConcurrency,
 } from '@/lib/ghl-client';
 import { toDeal, toMessages } from '@/lib/types';
 import { DEFAULT_FIELD_MAP } from '@/lib/won-track-engine';
@@ -186,14 +187,13 @@ export async function GET(request: Request) {
     return { opp, deal };
   });
 
-  const messagesByOpp = await Promise.all(
-    deals.map(({ deal }) =>
-      deal.contactId
-        ? fetchMessagesForContact(creds, deal.contactId)
-            .then(toMessages)
-            .catch(() => [])
-        : Promise.resolve([]),
-    ),
+  // Concurrencia acotada para no reventar el rate limit de GHL (429).
+  const messagesByOpp = await mapWithConcurrency(deals, 5, ({ deal }) =>
+    deal.contactId
+      ? fetchMessagesForContact(creds, deal.contactId)
+          .then(toMessages)
+          .catch(() => [])
+      : Promise.resolve([]),
   );
 
   const analyzedOpps: Array<{

@@ -26,6 +26,7 @@ import {
   fetchOpportunities,
   fetchConversationIdByContact,
   fetchConversationMessages,
+  mapWithConcurrency,
 } from '@/lib/ghl-client';
 import { toMessages } from '@/lib/types';
 import { diagnoseLossReasonLLM } from '@/lib/forense-llm';
@@ -299,8 +300,10 @@ export async function GET(request: Request) {
         messageCount: number;
       }> = [];
 
-      const conversations: GHLConversationInput[] = await Promise.all(
-        rawOpps.slice(0, 15).map(async (opp) => {
+      const conversations: GHLConversationInput[] = await mapWithConcurrency(
+        rawOpps.slice(0, 15),
+        5,
+        async (opp) => {
           const contactId = opp.contact?.id ?? null;
           // GHL /opportunities/search often omits conversationId — fall back to contact lookup
           let conversationId = opp.conversationId ?? null;
@@ -342,7 +345,7 @@ export async function GET(request: Request) {
             tags: ['lost'],
             messages,
           };
-        }),
+        },
       );
 
       const opps: GHLOpportunityInput[] = rawOpps.slice(0, 15).map((opp) => ({
