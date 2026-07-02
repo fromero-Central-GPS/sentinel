@@ -21,9 +21,6 @@ import { toDeal, toMessages } from '@/lib/types';
 import { DEFAULT_FIELD_MAP } from '@/lib/won-track-engine';
 import { getTenantThresholds } from '@/lib/won-track-store';
 
-/** Para acotar llamadas a GHL, solo traemos mensajes de las N oportunidades de mayor valor. */
-const MESSAGE_FETCH_LIMIT = 25;
-
 export async function GET(request: Request) {
   const { orgId } = await auth();
   if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -125,7 +122,7 @@ export async function GET(request: Request) {
         comentarios,
         owner,
         stage: a.stage,
-        daysSinceActivity: a.daysSinceLastContact,
+        daysSinceActivity: a.totalMessages === 0 ? null : a.daysSinceLastContact,
         riskScore: a.overallRiskScore,
         value: a.value,
         riskLevel: a.riskLevel,
@@ -179,12 +176,24 @@ export async function GET(request: Request) {
     fetchUsers(creds),
   ]);
 
-  // Solo traemos mensajes para las oportunidades de mayor valor (acota llamadas a GHL).
-  const fetchMessagesFor = new Set(
-    [...rawOpps]
-      .sort((a, b) => (b.monetaryValue ?? 0) - (a.monetaryValue ?? 0))
-      .slice(0, MESSAGE_FETCH_LIMIT)
-      .map((o) => o.id),
+  // Preparamos los deals y traemos los mensajes de TODAS las opps en paralelo.
+  // (Antes solo se pedían las top-25 por valor → el resto quedaba sin actividad y
+  // mostraba el centinela "999d".)
+  const deals = rawOpps.map((opp) => {
+    const deal = toDeal(opp, 'open');
+    // Resuelve el nombre de la etapa (search solo trae el id).
+    deal.pipelineStageName = stageMap[opp.pipelineStageId ?? ''] ?? deal.pipelineStageName;
+    return { opp, deal };
+  });
+
+  const messagesByOpp = await Promise.all(
+    deals.map(({ deal }) =>
+      deal.contactId
+        ? fetchMessagesForContact(creds, deal.contactId)
+            .then(toMessages)
+            .catch(() => [])
+        : Promise.resolve([]),
+    ),
   );
 
   const analyzedOpps: Array<{
@@ -194,19 +203,8 @@ export async function GET(request: Request) {
     owner: string | null;
   }> = [];
 
-  for (const opp of rawOpps) {
-    const deal = toDeal(opp, 'open');
-    // Resuelve el nombre de la etapa (search solo trae el id).
-    deal.pipelineStageName = stageMap[opp.pipelineStageId ?? ''] ?? deal.pipelineStageName;
-
-    // Traemos mensajes reales para las oportunidades prioritarias; el resto se
-    // evalúa con señales derivadas de la oportunidad (fechas/etapa).
-    const messages =
-      fetchMessagesFor.has(opp.id) && deal.contactId
-        ? toMessages(await fetchMessagesForContact(creds, deal.contactId))
-        : [];
-
-    const analysis = analyzeLiveOpportunity(deal, messages, thresholds);
+  deals.forEach(({ opp, deal }, i) => {
+    const analysis = analyzeLiveOpportunity(deal, messagesByOpp[i], thresholds);
     if (analysis.riskLevel !== 'none') {
       // "Comentarios" (custom field de la oportunidad) = lo que el cliente cotiza.
       const comentarios =
@@ -221,7 +219,7 @@ export async function GET(request: Request) {
         owner: deal.assignedTo ? (userMap[deal.assignedTo] ?? null) : null,
       });
     }
-  }
+  });
 
   const mappedOpps = analyzedOpps
     .map(({ analysis: a, opportunityName, comentarios, owner }) => ({
@@ -231,7 +229,8 @@ export async function GET(request: Request) {
       comentarios,
       owner,
       stage: a.stage,
-      daysSinceActivity: a.daysSinceLastContact,
+      // null = sin conversación (no mostrar el centinela 999d).
+      daysSinceActivity: a.totalMessages === 0 ? null : a.daysSinceLastContact,
       riskScore: a.overallRiskScore,
       value: a.value,
       riskLevel: a.riskLevel,

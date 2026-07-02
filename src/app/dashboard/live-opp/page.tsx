@@ -9,7 +9,7 @@ type Opportunity = {
   comentarios?: string;
   owner?: string | null;
   stage: string;
-  daysSinceActivity: number;
+  daysSinceActivity: number | null;
   riskScore: number;
   value: number;
   riskLevel: string;
@@ -238,7 +238,11 @@ export default function LiveOppPage() {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-sm text-zinc-700 font-mono">
-                          {opp.daysSinceActivity}d
+                          {opp.daysSinceActivity === null ? (
+                            <span className="text-zinc-400 font-sans">sin contacto</span>
+                          ) : (
+                            `${opp.daysSinceActivity}d`
+                          )}
                         </td>
                         <td className="py-3 px-4 text-sm text-zinc-500">{opp.stage || '—'}</td>
                         <td className="py-3 px-4 text-sm text-zinc-500">{opp.owner || '—'}</td>
