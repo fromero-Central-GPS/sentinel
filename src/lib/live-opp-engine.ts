@@ -343,28 +343,32 @@ export function analyzeLiveOpportunity(
     riskScore += 15;
   }
 
-  // 5. Deal open longer than Won Track benchmark
-  if (thresholds.avgTimeToClose > 0 && daysOpen > thresholds.avgTimeToClose * 2) {
+  // 5. Deal open longer than Won Track benchmark.
+  // Usamos la MEDIANA de tiempo de cierre (robusta) — el promedio se infla por
+  // outliers (p.ej. 56d avg vs 12d mediana en CentralGPS) y casi nunca disparaba.
+  const closeBenchmark =
+    thresholds.medianTimeToClose > 0 ? thresholds.medianTimeToClose : thresholds.avgTimeToClose;
+  if (closeBenchmark > 0 && daysOpen > closeBenchmark * 2) {
     alerts.push({
       category: 'deal_decay',
       severity: 'high',
       title: 'Deal abierto más del doble del benchmark',
-      detail: `${daysOpen}d abierto vs ${thresholds.avgTimeToClose}d promedio de cierre en Won Track`,
+      detail: `${daysOpen}d abierto vs ${closeBenchmark}d (mediana de cierre en Won Track)`,
       metric: 'days_open',
       currentValue: daysOpen,
-      threshold: thresholds.avgTimeToClose * 2,
+      threshold: closeBenchmark * 2,
       direction: 'above',
     });
     riskScore += 25;
-  } else if (thresholds.avgTimeToClose > 0 && daysOpen > thresholds.avgTimeToClose) {
+  } else if (closeBenchmark > 0 && daysOpen > closeBenchmark) {
     alerts.push({
       category: 'deal_decay',
       severity: 'medium',
-      title: 'Deal excede tiempo promedio de cierre',
-      detail: `${daysOpen}d abierto vs ${thresholds.avgTimeToClose}d promedio Won Track`,
+      title: 'Deal excede la mediana de cierre',
+      detail: `${daysOpen}d abierto vs ${closeBenchmark}d (mediana Won Track)`,
       metric: 'days_open',
       currentValue: daysOpen,
-      threshold: thresholds.avgTimeToClose,
+      threshold: closeBenchmark,
       direction: 'above',
     });
     riskScore += 10;
@@ -431,7 +435,7 @@ export function analyzeLiveOpportunity(
   }
   if (hasDealDecay) {
     recommendations.push(
-      `📊 Deal envejeciendo: ${daysOpen}d abierto vs ${thresholds.avgTimeToClose}d benchmark. Evaluar descuento por tiempo o incentivo de cierre rápido.`,
+      `📊 Deal envejeciendo: ${daysOpen}d abierto vs ${closeBenchmark}d (mediana de cierre). Evaluar descuento por tiempo o incentivo de cierre rápido.`,
     );
   }
   if (hasLowEngagement) {
@@ -486,7 +490,7 @@ export function analyzeLiveOpportunity(
     inboundRatio,
     totalMessages,
     daysOpen,
-    isPastBenchmark: thresholds.avgTimeToClose > 0 && daysOpen > thresholds.avgTimeToClose,
+    isPastBenchmark: closeBenchmark > 0 && daysOpen > closeBenchmark,
     intentSignals,
     recommendedActions: recommendations,
     urgency: urgencyFromScore(cappedScore),
@@ -561,7 +565,7 @@ export function formatLiveOppMarkdown(output: LiveOppOutput): string {
     `| Tiempo respuesta ideal | ≤${thresholds.idealResponseThreshold}min | Won Track (${thresholds.sampleSize} deals) |`,
     `| Tiempo respuesta peligro | >${thresholds.dangerResponseThreshold}min | 2x promedio Won Track |`,
     `| Engagement mínimo | ${Math.round(thresholds.lowEngagementThreshold * 100)}% inbound | Won Track - 20% |`,
-    `| Benchmark cierre | ${thresholds.avgTimeToClose}d | Promedio Won Track |`,
+    `| Benchmark cierre | ${thresholds.medianTimeToClose || thresholds.avgTimeToClose}d | Mediana Won Track |`,
     `| Canal más efectivo | ${thresholds.topChannel} | ${thresholds.channelWinRates[thresholds.topChannel] ?? 0} deals ganados |`,
     '',
     `## 🚨 Oportunidades en Riesgo`,

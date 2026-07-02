@@ -14,6 +14,8 @@ type WonTrackData = {
   successThresholds?: any;
   businessFeatures?: any;
   communicationPatterns?: any;
+  playbookSummary?: string | null;
+  topWinFactors?: { factor: string; count: number }[];
 };
 
 function formatCLP(value: number): string {
@@ -21,6 +23,23 @@ function formatCLP(value: number): string {
   if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
   return `$${value}`;
 }
+
+/** Códigos de taxonomy.WIN_FACTORS → etiqueta legible. */
+const WIN_FACTOR_LABELS: Record<string, string> = {
+  fast_close: 'Cierre rápido',
+  fast_response: 'Respuesta rápida',
+  high_engagement: 'Alto engagement del cliente',
+  voice_notes: 'Notas de voz',
+  multichannel: 'Comunicación multi-canal',
+  proactive_client: 'Cliente proactivo (docs/pago)',
+  preferred_channel: 'Canal preferido (WhatsApp)',
+  annual_plan: 'Plan anual',
+  multi_equipment: 'Multi-equipo',
+  high_intent: 'Alta intención (preguntas)',
+  positive_language: 'Lenguaje positivo',
+  integration_fit: 'Requerimiento de integración',
+  high_lead_score: 'Lead score alto',
+};
 
 export default function WonTrackPage() {
   const [data, setData] = useState<WonTrackData | null>(null);
@@ -176,6 +195,50 @@ export default function WonTrackPage() {
           <p className="mt-1 text-xs text-zinc-500">días hasta el cierre</p>
         </div>
       </div>
+
+      {/* Playbook de éxito (IA) */}
+      {data.playbookSummary && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700 mb-2">
+            Playbook de éxito · IA
+          </p>
+          <p className="text-sm text-indigo-900 leading-relaxed whitespace-pre-line">
+            {data.playbookSummary}
+          </p>
+        </div>
+      )}
+
+      {/* Factores de éxito más frecuentes */}
+      {data.topWinFactors && data.topWinFactors.length > 0 && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-6">
+          <h2 className="text-sm font-semibold text-zinc-700 mb-4">
+            Factores de éxito más frecuentes
+          </h2>
+          <div className="space-y-2.5">
+            {data.topWinFactors.slice(0, 10).map(({ factor, count }) => {
+              const sample = data.successThresholds?.sampleSize || 0;
+              const pct = sample > 0 ? Math.round((count / sample) * 100) : 0;
+              return (
+                <div key={factor}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-zinc-700">{WIN_FACTOR_LABELS[factor] ?? factor}</span>
+                    <span className="font-mono text-zinc-500">
+                      {count}
+                      {sample > 0 ? ` · ${pct}%` : ''}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-green-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {data.successThresholds && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
