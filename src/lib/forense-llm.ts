@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { generateStructured, type LLMAuth } from './llm';
+import { generateStructured, type LLMAuth, type LLMUsage } from './llm';
 import { LOSS_REASONS, type LossReason } from './taxonomy';
 import { buildTranscript } from './transcript';
 import type { CanonicalMessage } from './types';
@@ -51,6 +51,7 @@ Reglas:
 export async function diagnoseLossReasonLLM(
   messages: CanonicalMessage[],
   auth?: LLMAuth,
+  onUsage?: (usage: LLMUsage) => void,
 ): Promise<LossReasonDiagnosis | null> {
   // Limpia emails (hilos citados/firmas) y trunca priorizando el FINAL de la
   // conversación, que es donde suele estar la razón de pérdida.
@@ -62,6 +63,9 @@ export async function diagnoseLossReasonLLM(
     system: SYSTEM,
     prompt: `Conversación de la oportunidad perdida:\n\n${transcript}`,
     model: auth?.model,
-    apiKey: auth?.apiKey,
+    attribution: auth?.attribution
+      ? { ...auth.attribution, tags: [...(auth.attribution.tags ?? []), 'engine:forense'] }
+      : undefined,
+    onUsage,
   });
 }

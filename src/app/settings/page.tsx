@@ -16,11 +16,8 @@ type MetaSettings = {
 };
 
 type AiSettings = {
-  aiType: string;
-  aiModel: string | null;
-  aiApiKey: string | null;
-  isAdmin: boolean;
-  defaults: Record<string, string>;
+  managedByPlatform: boolean;
+  tier: string;
 };
 
 export default function SettingsPage() {
@@ -43,18 +40,8 @@ export default function SettingsPage() {
   const [verifyStatus, setVerifyStatus] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // AI (tiers) state
-  const [ai, setAi] = useState<AiSettings>({
-    aiType: 'deepseek',
-    aiModel: null,
-    aiApiKey: null,
-    isAdmin: false,
-    defaults: {},
-  });
-  const [aiType, setAiType] = useState('deepseek');
-  const [aiModel, setAiModel] = useState('');
-  const [aiApiKey, setAiApiKey] = useState('');
-  const [aiStatus, setAiStatus] = useState('');
+  // AI: gestionada por la plataforma según el plan — el tenant solo la ve informativa.
+  const [ai, setAi] = useState<AiSettings | null>(null);
   const [aiVerify, setAiVerify] = useState('');
 
   // Subscription / usage state
@@ -86,12 +73,7 @@ export default function SettingsPage() {
     // Load subscription & usage & plans
     fetch('/api/settings/ai')
       .then((r) => r.json())
-      .then((data: AiSettings) => {
-        setAi(data);
-        setAiType(data.aiType ?? 'deepseek');
-        setAiModel(data.aiModel ?? '');
-        setAiApiKey(data.aiApiKey ?? '');
-      })
+      .then((data: AiSettings) => setAi(data))
       .catch(() => {});
 
     fetch('/api/billing/subscription')
@@ -162,31 +144,11 @@ export default function SettingsPage() {
     setMetaStatus('Guardado ✓');
   }
 
-  async function saveAi() {
-    setAiStatus('Guardando…');
-    const res = await fetch('/api/settings/ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ aiType, aiModel, aiApiKey }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setAiStatus(data.error ?? 'Error al guardar');
-      return;
-    }
-    const updated: AiSettings = await fetch('/api/settings/ai').then((r) => r.json());
-    setAi(updated);
-    setAiType(updated.aiType ?? 'deepseek');
-    setAiModel(updated.aiModel ?? '');
-    setAiApiKey(updated.aiApiKey ?? '');
-    setAiStatus('Guardado ✓');
-  }
-
   async function verifyAi() {
     setAiVerify('Verificando…');
     const res = await fetch('/api/settings/ai/verify', { method: 'POST' });
     const data = await res.json();
-    setAiVerify(res.ok ? `✓ Conectado (${data.model})` : `Error: ${data.error}`);
+    setAiVerify(res.ok ? '✓ Análisis IA operativo' : `Error: ${data.error}`);
   }
 
   function copyWebhookUrl() {
@@ -340,78 +302,33 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {/* AI (tiers) Section */}
+      {/* AI Section — gestionada por la plataforma según el plan */}
       <section className="rounded-lg border p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Inteligencia Artificial (tier)</h2>
-          {!ai.isAdmin && (
-            <span className="text-xs text-amber-600">Solo el admin del tenant puede editar</span>
-          )}
-        </div>
-        <p className="text-sm text-gray-500">
-          Modelo usado por los motores (Forense/Won Track). Si no defines una API key, se usa el
-          gateway de la plataforma. Deja el modelo vacío para usar el default del tipo.
-        </p>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium">Tipo (proveedor)</label>
-          <select
-            value={aiType}
-            onChange={(e) => setAiType(e.target.value)}
-            disabled={!ai.isAdmin}
-            className="w-full rounded border px-3 py-2 text-sm disabled:bg-gray-100"
-          >
-            {Object.keys(ai.defaults).length > 0
-              ? Object.keys(ai.defaults).map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))
-              : ['deepseek', 'anthropic', 'openai', 'custom'].map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium">Modelo (slug del AI Gateway)</label>
-          <input
-            type="text"
-            value={aiModel}
-            onChange={(e) => setAiModel(e.target.value)}
-            disabled={!ai.isAdmin}
-            placeholder={ai.defaults[aiType] || 'ej: deepseek/deepseek-v3.2'}
-            className="w-full rounded border px-3 py-2 text-sm font-mono disabled:bg-gray-100"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium">API Key (opcional, BYOK)</label>
-          <input
-            type="password"
-            value={aiApiKey}
-            onChange={(e) => setAiApiKey(e.target.value)}
-            disabled={!ai.isAdmin}
-            placeholder={ai.aiApiKey ? ai.aiApiKey : 'Vacío = gateway de la plataforma (OIDC)'}
-            className="w-full rounded border px-3 py-2 text-sm font-mono disabled:bg-gray-100"
-          />
-          {ai.aiApiKey && <p className="text-xs text-gray-500">Key guardada: {ai.aiApiKey}</p>}
-        </div>
-
-        <div className="flex items-center gap-3">
+        <h2 className="text-lg font-semibold">Análisis con IA</h2>
+        <div className="rounded-xl bg-zinc-50 p-4 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-zinc-700">
+              El análisis IA está <span className="font-semibold">incluido en tu plan</span>
+              {ai?.tier ? (
+                <span className="ml-1 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 uppercase">
+                  {ai.tier}
+                </span>
+              ) : null}
+              . La plataforma gestiona los modelos y credenciales — no necesitas configurar nada.
+            </p>
+            <p className="mt-2 text-xs text-zinc-500">
+              Los planes superiores usan modelos de análisis más avanzados.{' '}
+              <a href="/pricing" className="underline">
+                Ver planes →
+              </a>
+            </p>
+          </div>
           <button
-            onClick={saveAi}
-            disabled={!ai.isAdmin}
-            className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+            onClick={verifyAi}
+            className="shrink-0 rounded border px-4 py-2 text-sm hover:bg-gray-50"
           >
-            Guardar
+            Probar
           </button>
-          <button onClick={verifyAi} className="rounded border px-4 py-2 text-sm hover:bg-gray-50">
-            Verificar conexión
-          </button>
-          {aiStatus && <span className="text-sm text-gray-600">{aiStatus}</span>}
         </div>
 
         {aiVerify && (

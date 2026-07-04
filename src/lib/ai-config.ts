@@ -1,73 +1,88 @@
 /**
- * Config de IA por tenant (Fase 2 — tiers de IA).
+ * Config de IA por tenant (Fase 3 — modelo por TIER, gestionado por plataforma).
  *
- * El admin del tenant elige tipo/modelo/API key en /settings. Acá se resuelve
- * ese registro a la forma que consume el cliente LLM (`LLMAuth`): modelo efectivo
- * + key BYOK desencriptada. Si el tenant no configuró nada, cae al default de
- * plataforma (modelo `LLM_MODEL` + OIDC).
+ * El tenant NUNCA elige proveedor/modelo/key: elige un plan (Free/Pro/
+ * Enterprise) y la plataforma decide qué LLM corre por debajo (`TIER_MODELS`).
+ * La credencial es única de plataforma (OIDC del proyecto / AI_GATEWAY_API_KEY)
+ * y la atribución de gasto por tenant viaja en cada llamada vía
+ * `providerOptions.gateway` ({user, tags}) — visible en el dashboard del
+ * AI Gateway sin gestionar keys por tenant.
+ *
+ * Las columnas `aiType`/`aiModel`/`aiApiKey` de appSettings quedaron OBSOLETAS
+ * (el BYOK por tenant se eliminó tras el bug de jul-2026: key inválida →
+ * fallos silenciosos). No se leen más; se conservan solo para no migrar
+ * destructivamente.
  */
 
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { appSettings } from '@/db/schema';
-import { decrypt } from './encryption';
-import { LLM_MODEL, pingLLM, type LLMAuth } from './llm';
-
-/** Proveedores/tier soportados y su modelo por defecto en el AI Gateway. */
-export const AI_TYPES = {
-  deepseek: 'deepseek/deepseek-v3.2',
-  anthropic: 'anthropic/claude-sonnet-4.6',
-  openai: 'openai/gpt-5.4',
-  custom: '',
-} as const;
-export type AIType = keyof typeof AI_TYPES;
-
-export interface TenantAIConfig extends LLMAuth {
-  type: AIType;
-  model: string;
-}
+import { organizations, subscriptions, plans } from '@/db/schema';
+import { LLM_MODEL, pingLLM, type LLMAuth, type LLMAttribution } from './llm';
 
 /**
- * Resuelve la config de IA efectiva del tenant. `model` siempre termina definido
- * (config → default del tipo → LLM_MODEL). `apiKey` desencriptada si existe.
+ * Modelo por tier (slug del plan → slug del AI Gateway). Override por env
+ * `SENTINEL_LLM_MODEL_<TIER>` (ej: SENTINEL_LLM_MODEL_ENTERPRISE) sin deploy
+ * de código. "lite" es alias del futuro rename de free.
  */
+export const TIER_MODELS: Record<string, string> = {
+  free: 'deepseek/deepseek-v3.2',
+  lite: 'deepseek/deepseek-v3.2',
+  pro: 'deepseek/deepseek-v3.2',
+  enterprise: 'anthropic/claude-sonnet-4.6',
+};
+
+export interface TenantAIConfig extends LLMAuth {
+  /** Slug del plan del tenant (free/pro/enterprise). */
+  tier: string;
+  model: string;
+  attribution: LLMAttribution;
+}
+
+/** Slug del plan activo del tenant ('free' si no tiene suscripción). */
+async function getTenantTier(orgId: string): Promise<string> {
+  try {
+    const [row] = await db
+      .select({ slug: plans.slug })
+      .from(organizations)
+      .innerJoin(subscriptions, eq(subscriptions.organizationId, organizations.id))
+      .innerJoin(plans, eq(subscriptions.planId, plans.id))
+      .where(eq(organizations.clerkOrgId, orgId));
+    return row?.slug ?? 'free';
+  } catch {
+    return 'free';
+  }
+}
+
+/** Resuelve la config de IA efectiva del tenant según su plan. */
 export async function getTenantAIConfig(orgId: string): Promise<TenantAIConfig> {
-  const [row] = await db.select().from(appSettings).where(eq(appSettings.tenantId, orgId));
-  const type = (row?.aiType as AIType | null) ?? 'deepseek';
-  const model = row?.aiModel || AI_TYPES[type] || LLM_MODEL;
+  const tier = await getTenantTier(orgId);
+  const envOverride = process.env[`SENTINEL_LLM_MODEL_${tier.toUpperCase()}`];
+  const model = envOverride || TIER_MODELS[tier] || LLM_MODEL;
   return {
-    type,
+    tier,
     model,
-    apiKey: row?.aiApiKey ? decrypt(row.aiApiKey) : undefined,
+    attribution: { user: orgId, tags: [`tenant:${orgId}`, `tier:${tier}`] },
   };
 }
 
 export interface WorkingAIConfig {
-  /** Config con la que el gateway respondió OK, o null si ninguna funciona. */
+  /** Config con la que el gateway respondió OK, o null si no hay credenciales. */
   config: TenantAIConfig | null;
-  /** true si la key BYOK del tenant falló y se usó el gateway de plataforma. */
+  /** Compat: siempre false desde que no existe BYOK por tenant. */
   usedFallback: boolean;
-  /** Error del ping cuando la config del tenant no funcionó. */
+  /** Error del ping cuando el gateway no respondió. */
   error?: string;
 }
 
 /**
  * Resuelve una config de IA que FUNCIONA, verificándola con un ping antes de
- * gastar un batch de llamadas. Caso real (jul-2026): el tenant guardó una API
- * key inválida en Settings → 25 llamadas fallaban en silencio y el regex se
- * cacheaba como si fuera análisis LLM. Si la BYOK falla, cae al gateway de
- * plataforma (OIDC); si tampoco, devuelve el error real para mostrarlo en UI.
+ * gastar un batch de llamadas (lección del bug BYOK jul-2026: nunca correr N
+ * llamadas contra credenciales no verificadas). Si el gateway no responde,
+ * devuelve el error real para mostrarlo en la UI.
  */
 export async function resolveWorkingAIConfig(orgId: string): Promise<WorkingAIConfig> {
-  const tenant = await getTenantAIConfig(orgId);
-  const ping = await pingLLM(tenant);
-  if (ping.ok) return { config: tenant, usedFallback: false };
-
-  if (tenant.apiKey) {
-    const platform: TenantAIConfig = { ...tenant, apiKey: undefined };
-    const platformPing = await pingLLM(platform);
-    if (platformPing.ok) return { config: platform, usedFallback: true, error: ping.error };
-  }
-
+  const config = await getTenantAIConfig(orgId);
+  const ping = await pingLLM(config);
+  if (ping.ok) return { config, usedFallback: false };
   return { config: null, usedFallback: false, error: ping.error };
 }
