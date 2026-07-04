@@ -260,11 +260,11 @@ export async function GET(request: Request) {
 
     // Persistir el blueprint → lo consume Live Opp.
     await saveTenantThresholds(orgId, output.thresholds);
-    await incrementUsage('wonTrack', deals.length);
 
     // Fase 2: narrativa playbook por LLM.
     let llmError: string | undefined;
     let llmFallback = false;
+    const llmUsage = { inputTokens: 0, outputTokens: 0 };
     if (useLLM) {
       // On-demand: verifica credenciales (BYOK → plataforma), corre el LLM y
       // guarda el resultado. Si nada funciona, reporta el error real a la UI.
@@ -273,7 +273,10 @@ export async function GET(request: Request) {
       if (!resolved.config) {
         llmError = resolved.error ?? 'Sin credenciales de AI Gateway.';
       } else {
-        const summary = await summarizeWinningPlaybookLLM(output, resolved.config);
+        const summary = await summarizeWinningPlaybookLLM(output, resolved.config, (u) => {
+          llmUsage.inputTokens += u.inputTokens;
+          llmUsage.outputTokens += u.outputTokens;
+        });
         if (summary) {
           output.playbookSummary = summary;
           output.playbookAnalyzedAt = new Date().toISOString();
@@ -300,6 +303,8 @@ export async function GET(request: Request) {
         output.playbookAnalyzedAt = pb.analyzedAt;
       }
     }
+
+    await incrementUsage('wonTrack', deals.length, llmUsage);
 
     return NextResponse.json({
       ...buildResponse(output, wonCount, wonCount + lostCount, avgTicket, 'live'),

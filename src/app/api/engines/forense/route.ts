@@ -31,6 +31,7 @@ import {
 import { toMessages } from '@/lib/types';
 import { diagnoseLossReasonLLM } from '@/lib/forense-llm';
 import { resolveWorkingAIConfig, type TenantAIConfig } from '@/lib/ai-config';
+import type { LLMUsage } from '@/lib/llm';
 import { getSyncedDeals, getSyncStatus } from '@/lib/deal-sync';
 import { cleanMessageBody } from '@/lib/transcript';
 
@@ -162,6 +163,8 @@ async function runForensicsPipeline(
     cached?: Map<string, LossReasonDiagnosis>;
     /** Si viene, el LLM solo corre para estos opportunityIds (cap de costo). */
     llmKeys?: Set<string>;
+    /** Metering: recibe los tokens reales de cada llamada LLM. */
+    onUsage?: (usage: LLMUsage) => void;
   },
 ) {
   const ai = opts?.ai;
@@ -182,7 +185,9 @@ async function runForensicsPipeline(
       // Razón de pérdida: si se pidió IA (y esta opp está en el batch), corre el
       // LLM; si no, usa el último análisis LLM cacheado; si tampoco hay, regex.
       const runLlm = Boolean(ai && (!llmKeys || llmKeys.has(opp.id)));
-      const llmDiagnosis = runLlm ? await diagnoseLossReasonLLM(messages, ai!) : null;
+      const llmDiagnosis = runLlm
+        ? await diagnoseLossReasonLLM(messages, ai!, opts?.onUsage)
+        : null;
       if (llmDiagnosis) llmOk.add(opp.id);
       const lossReason =
         llmDiagnosis ?? cached?.get(opp.id) ?? diagnoseLossReason(messages, 'lost', abandonment);
@@ -370,10 +375,15 @@ export async function GET(request: Request) {
         if (aiConfig) llmKeys = new Set(candidates);
       }
 
+      const llmUsage: LLMUsage = { inputTokens: 0, outputTokens: 0 };
       const { batch: batchResult, llmOk } = await runForensicsPipeline(conversations, opps, {
         ai: aiConfig,
         cached,
         llmKeys,
+        onUsage: (u) => {
+          llmUsage.inputTokens += u.inputTokens;
+          llmUsage.outputTokens += u.outputTokens;
+        },
       });
 
       if (llmOk.size > 0) {
@@ -401,7 +411,7 @@ export async function GET(request: Request) {
       }
 
       // El quota mensual mide análisis costosos (LLM); el regex local es gratis.
-      await incrementUsage('forense', llmOk.size);
+      await incrementUsage('forense', llmOk.size, llmUsage);
 
       const totalConversations = batchResult.conversations.length;
       batchResult.conversations = batchResult.conversations.slice(0, RESPONSE_CONVERSATION_CAP);
@@ -523,12 +533,17 @@ export async function GET(request: Request) {
       let llmError: string | undefined;
       let llmFallback = false;
       let llmSaved = 0;
+      const llmUsage: LLMUsage = { inputTokens: 0, outputTokens: 0 };
       if (useLLM) {
         const resolved = await resolveWorkingAIConfig(orgId);
         llmFallback = resolved.usedFallback;
         llmError = resolved.config ? undefined : resolved.error;
         const { batch, llmOk } = await runForensicsPipeline(conversations, opps, {
           ai: resolved.config,
+          onUsage: (u) => {
+            llmUsage.inputTokens += u.inputTokens;
+            llmUsage.outputTokens += u.outputTokens;
+          },
         });
         batchResult = batch;
         llmSaved = llmOk.size;
@@ -560,7 +575,7 @@ export async function GET(request: Request) {
       }
 
       // Track usage
-      await incrementUsage('forense', conversations.length);
+      await incrementUsage('forense', conversations.length, llmUsage);
 
       return NextResponse.json({
         batchResult,

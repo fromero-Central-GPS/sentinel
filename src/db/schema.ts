@@ -115,6 +115,9 @@ export const usageLog = pgTable('usage_log', {
   forenseRuns: text('forense_runs').notNull().default('0'),
   liveOppRuns: text('live_opp_runs').notNull().default('0'),
   wonTrackRuns: text('won_track_runs').notNull().default('0'),
+  // Tokens LLM reales consumidos (metering por tenant — Fase 3, IA por tier).
+  llmTokensInput: text('llm_tokens_input').notNull().default('0'),
+  llmTokensOutput: text('llm_tokens_output').notNull().default('0'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

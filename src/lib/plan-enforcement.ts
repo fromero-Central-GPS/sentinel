@@ -189,7 +189,11 @@ export async function getCurrentUsage(): Promise<{
   }
 }
 
-export async function incrementUsage(motor: MotorName, conversationCount: number): Promise<void> {
+export async function incrementUsage(
+  motor: MotorName,
+  conversationCount: number,
+  llmTokens?: { inputTokens: number; outputTokens: number },
+): Promise<void> {
   const tenant = await resolveTenantId();
   if (!tenant) return;
 
@@ -203,6 +207,8 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
         forenseRuns: string;
         liveOppRuns: string;
         wonTrackRuns: string;
+        llmTokensInput: string;
+        llmTokensOutput: string;
       }
     | undefined;
   try {
@@ -213,6 +219,8 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
         forenseRuns: usageLog.forenseRuns,
         liveOppRuns: usageLog.liveOppRuns,
         wonTrackRuns: usageLog.wonTrackRuns,
+        llmTokensInput: usageLog.llmTokensInput,
+        llmTokensOutput: usageLog.llmTokensOutput,
       })
       .from(usageLog)
       .where(and(eq(usageLog.organizationId, tenant.orgDbId), eq(usageLog.periodKey, periodKey)));
@@ -232,6 +240,12 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
       .set({
         conversationsAnalyzed: String(currentConversations + conversationCount),
         [fieldKey]: String(currentRuns + 1),
+        llmTokensInput: String(
+          parseInt(existing.llmTokensInput, 10) + (llmTokens?.inputTokens ?? 0),
+        ),
+        llmTokensOutput: String(
+          parseInt(existing.llmTokensOutput, 10) + (llmTokens?.outputTokens ?? 0),
+        ),
         updatedAt: new Date(),
       })
       .where(eq(usageLog.id, existing.id));
@@ -247,6 +261,8 @@ export async function incrementUsage(motor: MotorName, conversationCount: number
       forenseRuns,
       liveOppRuns,
       wonTrackRuns,
+      llmTokensInput: String(llmTokens?.inputTokens ?? 0),
+      llmTokensOutput: String(llmTokens?.outputTokens ?? 0),
     });
   }
 }

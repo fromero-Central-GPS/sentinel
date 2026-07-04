@@ -10,7 +10,7 @@
  */
 
 import { z } from 'zod';
-import { generateStructured, type LLMAuth } from './llm';
+import { generateStructured, type LLMAuth, type LLMUsage } from './llm';
 import type { WinFactor } from './taxonomy';
 import type { WonTrackOutput } from './won-track-engine';
 
@@ -37,6 +37,7 @@ function tallyFactors(output: WonTrackOutput): Array<[WinFactor, number]> {
 export async function summarizeWinningPlaybookLLM(
   output: WonTrackOutput,
   auth?: LLMAuth,
+  onUsage?: (usage: LLMUsage) => void,
 ): Promise<string | null> {
   if (output.deals.length === 0) return null;
 
@@ -61,7 +62,10 @@ Benchmarks:
     system: SYSTEM,
     prompt,
     model: auth?.model,
-    apiKey: auth?.apiKey,
+    attribution: auth?.attribution
+      ? { ...auth.attribution, tags: [...(auth.attribution.tags ?? []), 'engine:won_track'] }
+      : undefined,
+    onUsage,
   });
   return result?.summary ?? null;
 }

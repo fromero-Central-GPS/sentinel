@@ -1,27 +1,31 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { AI_TYPES } from '../ai-config';
+import { TIER_MODELS } from '../ai-config';
 import { isLLMEnabled } from '../llm';
 
-describe('AI tiers config', () => {
+describe('AI por tier (gestionada por plataforma)', () => {
   beforeEach(() => {
     delete process.env.AI_GATEWAY_API_KEY;
     delete process.env.VERCEL_OIDC_TOKEN;
   });
 
-  it('cada tipo tiene un modelo default (salvo custom, que es libre)', () => {
-    expect(AI_TYPES.deepseek).toBe('deepseek/deepseek-v3.2');
-    expect(AI_TYPES.anthropic).toContain('anthropic/');
-    expect(AI_TYPES.openai).toContain('openai/');
-    expect(AI_TYPES.custom).toBe('');
+  it('cada tier tiene un modelo asignado (el tenant nunca lo ve)', () => {
+    expect(TIER_MODELS.free).toBe('deepseek/deepseek-v3.2');
+    expect(TIER_MODELS.lite).toBe('deepseek/deepseek-v3.2');
+    expect(TIER_MODELS.pro).toBe('deepseek/deepseek-v3.2');
+    expect(TIER_MODELS.enterprise).toContain('anthropic/');
   });
 
-  it('una API key BYOK habilita el LLM aunque no haya OIDC/env', () => {
+  it('sin credenciales de plataforma el LLM queda deshabilitado (fallback regex)', () => {
     expect(isLLMEnabled()).toBe(false);
-    expect(isLLMEnabled({ apiKey: 'byok-123' })).toBe(true);
   });
 
-  it('OIDC/env de plataforma también habilita', () => {
+  it('OIDC de plataforma habilita el LLM', () => {
     process.env.VERCEL_OIDC_TOKEN = 'tok';
+    expect(isLLMEnabled()).toBe(true);
+  });
+
+  it('AI_GATEWAY_API_KEY de plataforma también habilita', () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
     expect(isLLMEnabled()).toBe(true);
   });
 });
