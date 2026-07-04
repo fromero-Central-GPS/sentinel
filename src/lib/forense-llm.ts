@@ -11,6 +11,7 @@
 import { z } from 'zod';
 import { generateStructured, type LLMAuth } from './llm';
 import { LOSS_REASONS, type LossReason } from './taxonomy';
+import { buildTranscript } from './transcript';
 import type { CanonicalMessage } from './types';
 import type { LossReasonDiagnosis } from './analysis-engine';
 
@@ -51,16 +52,10 @@ export async function diagnoseLossReasonLLM(
   messages: CanonicalMessage[],
   auth?: LLMAuth,
 ): Promise<LossReasonDiagnosis | null> {
-  const realMessages = messages.filter(
-    (m) => !m.messageType?.startsWith('TYPE_ACTIVITY') && (m.body?.trim().length ?? 0) > 0,
-  );
-  if (realMessages.length === 0) return null;
-
-  // Acota el prompt para controlar costo/latencia (conversaciones largas se truncan).
-  const transcript = realMessages
-    .map((m) => `[${m.direction === 'inbound' ? 'CLIENTE' : 'VENDEDOR'}] ${m.body}`)
-    .join('\n')
-    .slice(0, 6000);
+  // Limpia emails (hilos citados/firmas) y trunca priorizando el FINAL de la
+  // conversación, que es donde suele estar la razón de pérdida.
+  const transcript = buildTranscript(messages, 6000);
+  if (transcript.length === 0) return null;
 
   return generateStructured({
     schema,

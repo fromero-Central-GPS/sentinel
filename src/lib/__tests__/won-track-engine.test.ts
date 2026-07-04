@@ -125,6 +125,28 @@ describe('extractBusinessFeatures — custom fields configurables por tenant', (
   });
 });
 
+describe('extractBusinessFeatures — timeToClose usa lastStageChangeAt', () => {
+  it('prefiere lastStageChangeAt sobre updatedAt (ediciones masivas contaminan updatedAt)', () => {
+    const deal: Deal = {
+      ...baseDeal('TTC'),
+      lastStageChangeAt: iso(3 * 24 * 60), // won real: +3 días
+      updatedAt: iso(60 * 24 * 60), // edición masiva 2 meses después
+    };
+    const f = extractBusinessFeatures(deal);
+    expect(f.timeToClose).toBe(3);
+  });
+
+  it('cae a updatedAt cuando no hay lastStageChangeAt', () => {
+    const f = extractBusinessFeatures(baseDeal('TTC2')); // updatedAt = +5 días
+    expect(f.timeToClose).toBe(5);
+  });
+
+  it('nunca devuelve timeToClose negativo', () => {
+    const deal: Deal = { ...baseDeal('TTC3'), lastStageChangeAt: iso(-60) };
+    expect(extractBusinessFeatures(deal).timeToClose).toBe(0);
+  });
+});
+
 describe('analyzeWonDeal — factors (contrato WIN_FACTORS) 1:1 con winningFormula', () => {
   it('emite códigos de taxonomía derivados de las señales numéricas', () => {
     const deal: Deal = {
