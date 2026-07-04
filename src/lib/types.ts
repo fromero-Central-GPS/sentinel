@@ -79,6 +79,8 @@ export interface Deal {
   contactId: string;
   /** ID del usuario GHL asignado (vendedor responsable) — CEN-1000. */
   assignedTo?: string;
+  /** Razón de pérdida nativa de GHL (ground truth del equipo, si la registró). */
+  lostReasonId?: string;
   contact: DealContact;
   customFields?: DealCustomField[];
   attributions?: DealAttribution[];
@@ -128,6 +130,7 @@ export function toDeal(raw: RawOpportunity, defaultStatus: DealStatus = 'open'):
     updatedAt: raw.updatedAt ?? raw.lastStageChangeAt ?? now,
     lastStageChangeAt: raw.lastStageChangeAt,
     assignedTo: raw.assignedTo,
+    lostReasonId: raw.lostReasonId,
     contactId,
     contact: {
       id: contactId,

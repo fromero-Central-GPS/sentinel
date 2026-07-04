@@ -119,6 +119,54 @@ export const usageLog = pgTable('usage_log', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// ─── Deals sincronizados (full-funnel, Fase 3) ───────────────────────────
+//
+// Copia local de TODAS las oportunidades del tenant (won/lost/open) traídas por
+// paginación desde GHL. Los motores leen de aquí en vez de re-muestrear 15-20
+// opps por request: Won Track/Forense corren sobre el funnel completo y sin
+// quemar rate limit de GHL en cada carga de pantalla.
+
+export const deals = pgTable(
+  'deals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: text('tenant_id').notNull(),
+    /** ID de la oportunidad en GHL. */
+    ghlId: text('ghl_id').notNull(),
+    status: text('status').notNull(), // open | won | lost | abandoned
+    /** Valor en CLP como texto (consistente con el resto del schema). */
+    monetaryValue: text('monetary_value').notNull().default('0'),
+    contactName: text('contact_name'),
+    pipelineStageName: text('pipeline_stage_name'),
+    /** Razón de pérdida NATIVA de GHL (ground truth registrado por el equipo). */
+    lostReasonId: text('lost_reason_id'),
+    ghlCreatedAt: timestamp('ghl_created_at'),
+    lastStageChangeAt: timestamp('last_stage_change_at'),
+    ghlUpdatedAt: timestamp('ghl_updated_at'),
+    /** Deal canónico serializado (JSON) — lo que consumen los motores. */
+    payload: text('payload').notNull(),
+    syncedAt: timestamp('synced_at').defaultNow().notNull(),
+  },
+  (t) => [unique('deals_tenant_ghl_unique').on(t.tenantId, t.ghlId)],
+);
+
+// Mensajes de la conversación de cada deal (CanonicalMessage[] serializado).
+// Se reemplaza completo cuando el deal cambió desde la última sincronización.
+export const dealMessages = pgTable(
+  'deal_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: text('tenant_id').notNull(),
+    dealGhlId: text('deal_ghl_id').notNull(),
+    conversationId: text('conversation_id'),
+    payload: text('payload').notNull(), // CanonicalMessage[] JSON
+    messageCount: text('message_count').notNull().default('0'),
+    lastMessageAt: timestamp('last_message_at'),
+    syncedAt: timestamp('synced_at').defaultNow().notNull(),
+  },
+  (t) => [unique('deal_messages_tenant_deal_unique').on(t.tenantId, t.dealGhlId)],
+);
+
 // Caché del último análisis LLM por tenant (para no re-quemar tokens en cada
 // carga). engine: 'won_track' | 'forense'. key: 'playbook' o el opportunityId.
 export const llmAnalysis = pgTable(

@@ -31,6 +31,13 @@ import {
 import { toMessages } from '@/lib/types';
 import { diagnoseLossReasonLLM } from '@/lib/forense-llm';
 import { getTenantAIConfig, type TenantAIConfig } from '@/lib/ai-config';
+import { getSyncedDeals, getSyncStatus } from '@/lib/deal-sync';
+import { cleanMessageBody } from '@/lib/transcript';
+
+/** Máximo de conversaciones que analiza el LLM por corrida on-demand (costo). */
+const LLM_BATCH_SIZE = 25;
+/** Máximo de conversaciones detalladas en la respuesta (el summary cubre todas). */
+const RESPONSE_CONVERSATION_CAP = 150;
 
 // ─── Mock data for demo mode ─────────────────────────────────────────────
 
@@ -150,21 +157,30 @@ function buildMockConversations(): GHLConversationInput[] {
 async function runForensicsPipeline(
   conversations: GHLConversationInput[],
   opps: GHLOpportunityInput[],
-  opts?: { ai?: TenantAIConfig | null; cached?: Map<string, LossReasonDiagnosis> },
+  opts?: {
+    ai?: TenantAIConfig | null;
+    cached?: Map<string, LossReasonDiagnosis>;
+    /** Si viene, el LLM solo corre para estos opportunityIds (cap de costo). */
+    llmKeys?: Set<string>;
+  },
 ) {
   const ai = opts?.ai;
   const cached = opts?.cached;
+  const llmKeys = opts?.llmKeys;
   const analyses = await Promise.all(
     conversations.map(async (conv, i) => {
       const opp = opps[i];
-      const messages = conv.messages || [];
+      // Limpia hilos citados/firmas de emails: sin esto, el regex matchea texto
+      // citado del propio vendedor como si fuera señal del cliente.
+      const messages = (conv.messages || []).map((m) => ({ ...m, body: cleanMessageBody(m) }));
       const abandonment = detectAbandonment(messages, conv.lastMessageDate);
       const intentSignals = detectPurchaseIntent(messages);
       const stageClassification = classifyFunnelStage(messages, opp.pipelineStageName);
-      // Razón de pérdida: si se pidió IA, corre el LLM; si no, usa el último análisis
-      // LLM cacheado para esa oportunidad; si tampoco hay, cae al regex determinista.
+      // Razón de pérdida: si se pidió IA (y esta opp está en el batch), corre el
+      // LLM; si no, usa el último análisis LLM cacheado; si tampoco hay, regex.
+      const runLlm = Boolean(ai && (!llmKeys || llmKeys.has(opp.id)));
       const lossReason =
-        (ai ? await diagnoseLossReasonLLM(messages, ai) : null) ??
+        (runLlm ? await diagnoseLossReasonLLM(messages, ai!) : null) ??
         cached?.get(opp.id) ??
         diagnoseLossReason(messages, 'lost', abandonment);
       const recoverability = scoreRecoverability(
@@ -185,6 +201,7 @@ async function runForensicsPipeline(
         abandonment,
         lossReason,
         recoverability,
+        ghlLostReasonId: opp.lostReasonId,
         analyzedAt: new Date().toISOString(),
       };
     }),
@@ -272,6 +289,123 @@ export async function GET(request: Request) {
     const token = decrypt(row.ghlApiToken);
     const locationId = row.ghlLocationId;
     const creds = { token, locationId };
+
+    // ─── Fuente preferida: BD sincronizada (funnel COMPLETO de perdidos) ──
+    //
+    // Con sync analizamos las 700+ opps perdidas en vez de las 15 más recientes,
+    // sin llamadas a GHL. El LLM sigue siendo on-demand y acotado: solo corre
+    // para las top-N por valor que aún no tienen diagnóstico cacheado.
+    const synced = await getSyncedDeals(orgId, 'lost');
+    if (synced.length > 0) {
+      const sorted = [...synced].sort(
+        (a, b) => (b.deal.monetaryValue ?? 0) - (a.deal.monetaryValue ?? 0),
+      );
+
+      const conversations: GHLConversationInput[] = sorted.map(({ deal, messages }) => {
+        const lastMsgTimestamp =
+          messages.length > 0
+            ? Math.max(...messages.map((m) => new Date(m.dateAdded).getTime()))
+            : new Date(deal.lastStageChangeAt ?? deal.updatedAt).getTime();
+        return {
+          id: deal.id,
+          contactId: deal.contactId,
+          contactName: deal.contact.name,
+          lastMessageDate: lastMsgTimestamp,
+          lastMessageType: 'TYPE_WHATSAPP',
+          lastMessageDirection: 'inbound' as const,
+          lastMessageBody: messages[messages.length - 1]?.body ?? '',
+          unreadCount: 0,
+          tags: ['lost'],
+          messages,
+        };
+      });
+
+      const opps: GHLOpportunityInput[] = sorted.map(({ deal }) => ({
+        id: deal.id,
+        name: deal.name,
+        contactId: deal.contactId,
+        contactName: deal.contact.name,
+        monetaryValue: deal.monetaryValue ?? 0,
+        pipelineId: deal.pipelineId ?? 'unknown',
+        pipelineStageId: deal.pipelineStageId ?? 'lost',
+        pipelineStageName: deal.pipelineStageName || 'Perdido',
+        status: 'lost' as const,
+        lastStageChangeAt: deal.lastStageChangeAt,
+        createdAt: deal.createdAt,
+        lostReasonId: deal.lostReasonId,
+      }));
+
+      const cachedRecs = await getLlmAnalysis<LossReasonDiagnosis>(orgId, 'forense');
+      const cached = new Map(cachedRecs.map((r) => [r.key, r.payload]));
+      let llmAnalyzedAt = cachedRecs.reduce<string | null>(
+        (max, r) => (!max || r.analyzedAt > max ? r.analyzedAt : max),
+        null,
+      );
+
+      let aiConfig: TenantAIConfig | null = null;
+      let llmKeys: Set<string> | undefined;
+      if (useLLM) {
+        // Candidatas: top por valor, con conversación, sin diagnóstico cacheado.
+        const candidates = sorted
+          .filter(({ deal, messages }) => messages.length > 0 && !cached.has(deal.id))
+          .slice(0, LLM_BATCH_SIZE)
+          .map(({ deal }) => deal.id);
+        const limitCheck = await enforceConversationLimit(candidates.length);
+        if (limitCheck.blocked) return limitCheck.response!;
+        aiConfig = await getTenantAIConfig(orgId);
+        llmKeys = new Set(candidates);
+      }
+
+      const batchResult = await runForensicsPipeline(conversations, opps, {
+        ai: aiConfig,
+        cached,
+        llmKeys,
+      });
+
+      if (useLLM && llmKeys && llmKeys.size > 0) {
+        await Promise.all(
+          batchResult.conversations
+            .filter((c) => c.opportunityId && llmKeys!.has(c.opportunityId))
+            .map((c) =>
+              saveLlmAnalysis(orgId, 'forense', c.opportunityId!, c.lossReason, aiConfig!.model),
+            ),
+        );
+        llmAnalyzedAt = new Date().toISOString();
+      }
+
+      // Cobertura de la razón de pérdida nativa de GHL (ground truth del equipo).
+      const ghlLossReasonCounts: Record<string, number> = {};
+      for (const { deal } of sorted) {
+        if (deal.lostReasonId) {
+          ghlLossReasonCounts[deal.lostReasonId] =
+            (ghlLossReasonCounts[deal.lostReasonId] ?? 0) + 1;
+        }
+      }
+
+      // El quota mensual mide análisis costosos (LLM); el regex local es gratis.
+      await incrementUsage('forense', llmKeys?.size ?? 0);
+
+      const totalConversations = batchResult.conversations.length;
+      batchResult.conversations = batchResult.conversations.slice(0, RESPONSE_CONVERSATION_CAP);
+
+      const syncStatus = await getSyncStatus(orgId);
+      return NextResponse.json({
+        batchResult,
+        _meta: {
+          mode: 'live',
+          source: 'sync',
+          analyzedAt: new Date().toISOString(),
+          llmAnalyzedAt,
+          llmAnalyzedCount: llmKeys?.size ?? 0,
+          llmCachedCount: cached.size,
+          conversationCount: totalConversations,
+          ghlLossReasonCounts,
+          syncedAt: syncStatus.lastSyncedAt,
+          locationId,
+          note: `Funnel completo desde BD sincronizada (${totalConversations} oportunidades perdidas).`,
+        },
+      });
+    }
 
     try {
       const rawOpps = await fetchOpportunities(creds, 'lost', 20);

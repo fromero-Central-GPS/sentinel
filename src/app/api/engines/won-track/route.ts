@@ -18,6 +18,7 @@ import { summarizeWinningPlaybookLLM } from '@/lib/wontrack-llm';
 import { getTenantAIConfig } from '@/lib/ai-config';
 import { getLlmAnalysis, saveLlmAnalysis } from '@/lib/llm-store';
 import { saveTenantThresholds } from '@/lib/won-track-store';
+import { getSyncedDeals, getSyncStatus } from '@/lib/deal-sync';
 
 /** Cuántos deals ganados muestreamos para extraer patrones de conversación (acota llamadas a GHL). */
 const SAMPLE_SIZE = 20;
@@ -197,29 +198,59 @@ export async function GET(request: Request) {
   };
 
   try {
-    // Conteos para la tasa de conversión (baratos: solo metadatos).
-    const [wonRaw, lostRaw] = await Promise.all([
-      fetchOpportunities(creds, 'won', 100),
-      fetchOpportunities(creds, 'lost', 100),
-    ]);
+    // ─── Fuente de datos: BD sincronizada (funnel completo) o GHL directo ──
+    //
+    // Con sync: analizamos TODOS los deals ganados (no una muestra top-20 por
+    // valor, que sesgaba los benchmarks hacia los deals grandes) y sin gastar
+    // rate limit de GHL. Sin sync: comportamiento legacy (muestra directa).
+    const synced = await getSyncedDeals(orgId, 'won');
+    const usingSync = synced.length > 0;
 
-    if (wonRaw.length === 0) {
-      const empty = generateWonTrackOutput([], [], []);
-      await saveTenantThresholds(orgId, empty.thresholds);
-      return NextResponse.json(buildResponse(empty, 0, lostRaw.length, 0, 'live'));
+    let deals;
+    let wonCount: number;
+    let lostCount: number;
+    let avgTicket: number;
+    let syncedAt: string | null = null;
+
+    if (usingSync) {
+      const status = await getSyncStatus(orgId);
+      syncedAt = status.lastSyncedAt;
+      wonCount = status.counts['won'] ?? synced.length;
+      lostCount = status.counts['lost'] ?? 0;
+      deals = synced.map(({ deal, messages }) => analyzeWonDeal(deal, messages, fieldMap));
+      avgTicket = Math.round(
+        synced.reduce((s, { deal }) => s + (deal.monetaryValue ?? 0), 0) / synced.length,
+      );
+    } else {
+      // Conteos para la tasa de conversión (baratos: solo metadatos).
+      const [wonRaw, lostRaw] = await Promise.all([
+        fetchOpportunities(creds, 'won', 100),
+        fetchOpportunities(creds, 'lost', 100),
+      ]);
+
+      if (wonRaw.length === 0) {
+        const empty = generateWonTrackOutput([], [], []);
+        await saveTenantThresholds(orgId, empty.thresholds);
+        return NextResponse.json(buildResponse(empty, 0, lostRaw.length, 0, 'live'));
+      }
+
+      // Muestra los deals de mayor valor para extraer patrones de conversación.
+      const sample = [...wonRaw]
+        .sort((a, b) => (b.monetaryValue ?? 0) - (a.monetaryValue ?? 0))
+        .slice(0, SAMPLE_SIZE);
+
+      // Concurrencia acotada para no reventar el rate limit de GHL (429).
+      deals = await mapWithConcurrency(sample, 5, async (raw) => {
+        const opp = toDeal(raw, 'won');
+        const messages = toMessages(await fetchMessagesForContact(creds, opp.contactId));
+        return analyzeWonDeal(opp, messages, fieldMap);
+      });
+      wonCount = wonRaw.length;
+      lostCount = lostRaw.length;
+      avgTicket = Math.round(
+        wonRaw.reduce((s, o) => s + (o.monetaryValue ?? 0), 0) / wonRaw.length,
+      );
     }
-
-    // Muestra los deals de mayor valor para extraer patrones de conversación.
-    const sample = [...wonRaw]
-      .sort((a, b) => (b.monetaryValue ?? 0) - (a.monetaryValue ?? 0))
-      .slice(0, SAMPLE_SIZE);
-
-    // Concurrencia acotada para no reventar el rate limit de GHL (429).
-    const deals = await mapWithConcurrency(sample, 5, async (raw) => {
-      const opp = toDeal(raw, 'won');
-      const messages = toMessages(await fetchMessagesForContact(creds, opp.contactId));
-      return analyzeWonDeal(opp, messages, fieldMap);
-    });
 
     const output = generateWonTrackOutput(
       deals,
@@ -251,12 +282,11 @@ export async function GET(request: Request) {
       }
     }
 
-    const avgTicket = Math.round(
-      wonRaw.reduce((s, o) => s + (o.monetaryValue ?? 0), 0) / wonRaw.length,
-    );
-    const total = wonRaw.length + lostRaw.length;
-
-    return NextResponse.json(buildResponse(output, wonRaw.length, total, avgTicket, 'live'));
+    return NextResponse.json({
+      ...buildResponse(output, wonCount, wonCount + lostCount, avgTicket, 'live'),
+      dataSource: usingSync ? 'sync' : 'direct',
+      syncedAt,
+    });
   } catch (err) {
     console.error('[Won Track] live error:', err);
     return NextResponse.json({ error: 'Error al consultar GHL' }, { status: 502 });

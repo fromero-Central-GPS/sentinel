@@ -29,6 +29,8 @@ export interface RawOpportunity {
   pipelineStage?: { name?: string };
   /** ID del usuario GHL asignado (vendedor/dueño de la oportunidad). */
   assignedTo?: string;
+  /** Razón de pérdida nativa de GHL (la registra el equipo al marcar lost). */
+  lostReasonId?: string;
   lastStageChangeAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -130,6 +132,60 @@ export async function fetchOpportunities(
   }
   const data = (await res.json()) as { opportunities?: RawOpportunity[]; data?: RawOpportunity[] };
   return data.opportunities ?? data.data ?? [];
+}
+
+/** Cursor de paginación de /opportunities/search (se pasa tal cual entre páginas). */
+export interface OpportunityPageCursor {
+  startAfter?: string;
+  startAfterId?: string;
+}
+
+export interface OpportunityPage {
+  opportunities: RawOpportunity[];
+  /** Total de oportunidades con ese status en GHL (para barras de progreso). */
+  total: number;
+  /** Cursor para la página siguiente, o null si no hay más. */
+  next: OpportunityPageCursor | null;
+}
+
+/**
+ * Una página de oportunidades por estado, con cursor para continuar. Base del
+ * sync full-funnel: permite recorrer las ~cientos de opps sin traerlas de golpe.
+ */
+export async function fetchOpportunitiesPage(
+  { token, locationId }: GhlCredentials,
+  status: OpportunityStatus,
+  cursor?: OpportunityPageCursor,
+  limit = 100,
+): Promise<OpportunityPage> {
+  const params = new URLSearchParams({
+    location_id: locationId,
+    status,
+    limit: String(limit),
+    order: 'added_desc',
+  });
+  if (cursor?.startAfter) params.set('startAfter', cursor.startAfter);
+  if (cursor?.startAfterId) params.set('startAfterId', cursor.startAfterId);
+
+  const res = await ghlFetch(`/opportunities/search?${params.toString()}`, token);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`GHL opportunities page (${status}) ${res.status}: ${text}`);
+  }
+  const data = (await res.json()) as {
+    opportunities?: RawOpportunity[];
+    meta?: { total?: number; startAfter?: number | string; startAfterId?: string; nextPageUrl?: string };
+  };
+  const opportunities = data.opportunities ?? [];
+  const meta = data.meta;
+  const hasNext = Boolean(meta?.nextPageUrl && meta?.startAfterId && opportunities.length > 0);
+  return {
+    opportunities,
+    total: meta?.total ?? opportunities.length,
+    next: hasNext
+      ? { startAfter: String(meta!.startAfter), startAfterId: meta!.startAfterId }
+      : null,
+  };
 }
 
 /** Resuelve el conversationId de un contacto (GHL suele omitirlo en /opportunities). */

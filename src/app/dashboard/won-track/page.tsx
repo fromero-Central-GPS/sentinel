@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { SyncButton } from '@/components/engines/SyncButton';
 
 type WonTrackData = {
   period: string;
@@ -140,6 +141,7 @@ export default function WonTrackPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {mode === 'live' && <SyncButton onSynced={() => load(false)} />}
           <span className="text-sm text-zinc-500">Datos:</span>
           <div className="flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
             <button

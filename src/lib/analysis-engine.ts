@@ -53,6 +53,8 @@ export interface GHLOpportunityInput {
   lastStageChangeAt?: string;
   createdAt: string;
   customFields?: Array<{ id: string; fieldValueString?: string }>;
+  /** Razón de pérdida nativa de GHL (registrada por el equipo), si existe. */
+  lostReasonId?: string;
 }
 
 // ─── Tipos de salida (resultados del análisis) ────────────────────────────
@@ -114,6 +116,8 @@ export interface ConversationAnalysis {
   abandonment: AbandonmentDiagnosis;
   lossReason: LossReasonDiagnosis;
   recoverability: RecoverabilityScore;
+  /** Razón de pérdida nativa de GHL (ground truth para contrastar con el diagnóstico). */
+  ghlLostReasonId?: string;
   analyzedAt: string;
 }
 

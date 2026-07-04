@@ -177,9 +177,13 @@ export function extractBusinessFeatures(
   // Lead score
   const leadScore = opp.contact.score?.[0]?.score ?? 0;
 
-  // Time to close
-  const timeToClose = Math.floor(
-    (new Date(opp.updatedAt).getTime() - new Date(opp.createdAt).getTime()) / (1000 * 60 * 60 * 24),
+  // Time to close: usar lastStageChangeAt (momento real del won) — updatedAt se
+  // contamina con cualquier edición posterior (hubo una edición masiva el
+  // 15-may-2026 que inflaba el promedio de cierre a 56d vs 12d de mediana).
+  const closedAtMs = new Date(opp.lastStageChangeAt ?? opp.updatedAt).getTime();
+  const timeToClose = Math.max(
+    0,
+    Math.floor((closedAtMs - new Date(opp.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
   );
   const closeSpeed: BusinessFeatures['closeSpeed'] =
     timeToClose <= 1
