@@ -353,53 +353,67 @@ export async function GET(request: Request) {
         null,
       );
 
-      let aiConfig: TenantAIConfig | null = null;
-      let llmKeys: Set<string> | undefined;
       let llmError: string | undefined;
       let llmFallback = false;
+      let llmRequested = 0;
+      const llmResults = new Map<string, LossReasonDiagnosis>();
+      const llmUsage: LLMUsage = { inputTokens: 0, outputTokens: 0 };
+
       if (useLLM) {
         // Candidatas: top por valor, con conversación, sin diagnóstico cacheado.
         const candidates = sorted
           .filter(({ deal, messages }) => messages.length > 0 && !cached.has(deal.id))
-          .slice(0, LLM_BATCH_SIZE)
-          .map(({ deal }) => deal.id);
+          .slice(0, LLM_BATCH_SIZE);
+        llmRequested = candidates.length;
         const limitCheck = await enforceConversationLimit(candidates.length);
         if (limitCheck.blocked) return limitCheck.response!;
-        // Verifica credenciales ANTES del batch: si la key BYOK del tenant no
-        // funciona cae al gateway de plataforma; si nada funciona, reporta el
-        // error real a la UI en vez de fallar 25 veces en silencio.
+        // Verifica credenciales ANTES del batch para no fallar N veces en silencio.
         const resolved = await resolveWorkingAIConfig(orgId);
-        aiConfig = resolved.config;
         llmFallback = resolved.usedFallback;
-        llmError = resolved.config ? undefined : resolved.error;
-        if (aiConfig) llmKeys = new Set(candidates);
+        if (!resolved.config) {
+          llmError = resolved.error;
+        } else {
+          const aiConfig: TenantAIConfig = resolved.config;
+          // Concurrencia acotada: N llamadas simultáneas revientan el rate limit
+          // del gateway (free tier: solo 4 de 25 pasaban). El SDK además
+          // reintenta 3 veces con backoff por llamada.
+          const llmErrors: string[] = [];
+          await mapWithConcurrency(candidates, 2, async ({ deal, messages }) => {
+            const diagnosis = await diagnoseLossReasonLLM(
+              messages,
+              aiConfig,
+              (u) => {
+                llmUsage.inputTokens += u.inputTokens;
+                llmUsage.outputTokens += u.outputTokens;
+              },
+              (message) => llmErrors.push(message),
+            );
+            if (diagnosis) llmResults.set(deal.id, diagnosis);
+          });
+
+          if (llmResults.size > 0) {
+            await Promise.all(
+              [...llmResults.entries()].map(([oppId, diagnosis]) =>
+                saveLlmAnalysis(orgId, 'forense', oppId, diagnosis, aiConfig.model),
+              ),
+            );
+            llmAnalyzedAt = new Date().toISOString();
+            // Los nuevos diagnósticos entran al pipeline como cacheados.
+            for (const [oppId, diagnosis] of llmResults) cached.set(oppId, diagnosis);
+          }
+
+          const failed = candidates.length - llmResults.size;
+          if (failed > 0) {
+            const raw = llmErrors[0] ?? '';
+            llmError =
+              /rate.?limit|free tier/i.test(raw)
+                ? `El análisis IA procesó ${llmResults.size} de ${candidates.length} conversaciones: el AI Gateway está en plan gratuito (límite de velocidad). Carga créditos en Vercel → AI Gateway para análisis sin restricciones.`
+                : `El análisis IA falló en ${failed} de ${candidates.length} conversaciones: ${raw.slice(0, 180)}`;
+          }
+        }
       }
 
-      const llmUsage: LLMUsage = { inputTokens: 0, outputTokens: 0 };
-      const { batch: batchResult, llmOk } = await runForensicsPipeline(conversations, opps, {
-        ai: aiConfig,
-        cached,
-        llmKeys,
-        onUsage: (u) => {
-          llmUsage.inputTokens += u.inputTokens;
-          llmUsage.outputTokens += u.outputTokens;
-        },
-      });
-
-      if (llmOk.size > 0) {
-        // Cachear SOLO diagnósticos que realmente salieron del LLM.
-        await Promise.all(
-          batchResult.conversations
-            .filter((c) => c.opportunityId && llmOk.has(c.opportunityId))
-            .map((c) =>
-              saveLlmAnalysis(orgId, 'forense', c.opportunityId!, c.lossReason, aiConfig!.model),
-            ),
-        );
-        llmAnalyzedAt = new Date().toISOString();
-      }
-      if (useLLM && !llmError && llmKeys && llmOk.size < llmKeys.size) {
-        llmError = `El LLM falló en ${llmKeys.size - llmOk.size} de ${llmKeys.size} conversaciones.`;
-      }
+      const { batch: batchResult } = await runForensicsPipeline(conversations, opps, { cached });
 
       // Cobertura de la razón de pérdida nativa de GHL (ground truth del equipo).
       const ghlLossReasonCounts: Record<string, number> = {};
@@ -411,7 +425,7 @@ export async function GET(request: Request) {
       }
 
       // El quota mensual mide análisis costosos (LLM); el regex local es gratis.
-      await incrementUsage('forense', llmOk.size, llmUsage);
+      await incrementUsage('forense', llmResults.size, llmUsage);
 
       const totalConversations = batchResult.conversations.length;
       batchResult.conversations = batchResult.conversations.slice(0, RESPONSE_CONVERSATION_CAP);
@@ -424,7 +438,8 @@ export async function GET(request: Request) {
           source: 'sync',
           analyzedAt: new Date().toISOString(),
           llmAnalyzedAt,
-          llmAnalyzedCount: llmOk.size,
+          llmAnalyzedCount: llmResults.size,
+          llmRequestedCount: llmRequested,
           llmCachedCount: cached.size,
           llmError,
           llmFallback,

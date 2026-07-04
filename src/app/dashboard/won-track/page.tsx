@@ -191,11 +191,8 @@ export default function WonTrackPage() {
       )}
 
       {data.llmError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          🤖 El análisis IA no pudo ejecutarse: {data.llmError}{' '}
-          <a href="/settings" className="underline font-medium">
-            Verificar API key en Settings →
-          </a>
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          🤖 El análisis IA no pudo completarse: {data.llmError}
         </div>
       )}
       {data.llmFallback && !data.llmError && (
