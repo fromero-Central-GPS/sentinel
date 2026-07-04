@@ -200,7 +200,7 @@ export default function WonTrackPage() {
       )}
       {data.llmFallback && !data.llmError && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-          ⚠️ Tu API key de IA no funciona — se usó el gateway de la plataforma. Revisala en
+          ⚠️ Tu API key de IA no funciona — se usó el gateway de la plataforma. Revísala en
           Settings.
         </div>
       )}

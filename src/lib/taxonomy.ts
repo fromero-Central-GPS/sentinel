@@ -4,7 +4,7 @@
  * Los 3 motores (Forense/analysis, Won Track, Live Opp) tienen que "hablar el
  * mismo idioma": una razón de pérdida, una señal de riesgo o una intención debe
  * significar lo mismo en todos. Antes cada motor definía sus propias uniones de
- * string en paralelo; acá viven una sola vez y los motores las re-exportan.
+ * string en paralelo; aquí viven una sola vez y los motores las re-exportan.
  *
  * Cada vocabulario se declara como `const` array (fuente de verdad runtime, útil
  * para iterar/validar) + un tipo derivado (`(typeof X)[number]`). Las cadenas
