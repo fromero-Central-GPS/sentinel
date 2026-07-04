@@ -30,7 +30,7 @@ import {
 } from '@/lib/ghl-client';
 import { toMessages } from '@/lib/types';
 import { diagnoseLossReasonLLM } from '@/lib/forense-llm';
-import { getTenantAIConfig, type TenantAIConfig } from '@/lib/ai-config';
+import { resolveWorkingAIConfig, type TenantAIConfig } from '@/lib/ai-config';
 import { getSyncedDeals, getSyncStatus } from '@/lib/deal-sync';
 import { cleanMessageBody } from '@/lib/transcript';
 
@@ -167,6 +167,9 @@ async function runForensicsPipeline(
   const ai = opts?.ai;
   const cached = opts?.cached;
   const llmKeys = opts?.llmKeys;
+  // Opps cuyo diagnóstico salió realmente del LLM (no del fallback). Solo estos
+  // se cachean: guardar el fallback como si fuera LLM envenena la caché.
+  const llmOk = new Set<string>();
   const analyses = await Promise.all(
     conversations.map(async (conv, i) => {
       const opp = opps[i];
@@ -179,10 +182,10 @@ async function runForensicsPipeline(
       // Razón de pérdida: si se pidió IA (y esta opp está en el batch), corre el
       // LLM; si no, usa el último análisis LLM cacheado; si tampoco hay, regex.
       const runLlm = Boolean(ai && (!llmKeys || llmKeys.has(opp.id)));
+      const llmDiagnosis = runLlm ? await diagnoseLossReasonLLM(messages, ai!) : null;
+      if (llmDiagnosis) llmOk.add(opp.id);
       const lossReason =
-        (runLlm ? await diagnoseLossReasonLLM(messages, ai!) : null) ??
-        cached?.get(opp.id) ??
-        diagnoseLossReason(messages, 'lost', abandonment);
+        llmDiagnosis ?? cached?.get(opp.id) ?? diagnoseLossReason(messages, 'lost', abandonment);
       const recoverability = scoreRecoverability(
         opp.monetaryValue,
         abandonment,
@@ -206,7 +209,10 @@ async function runForensicsPipeline(
       };
     }),
   );
-  return generateBatchSummary(analyses, opps[0]?.pipelineId ?? 'demo-pipeline', 'Sentinel');
+  return {
+    batch: generateBatchSummary(analyses, opps[0]?.pipelineId ?? 'demo-pipeline', 'Sentinel'),
+    llmOk,
+  };
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────
@@ -254,7 +260,7 @@ export async function GET(request: Request) {
       },
     ];
 
-    const batchResult = await runForensicsPipeline(conversations, opps);
+    const { batch: batchResult } = await runForensicsPipeline(conversations, opps);
 
     return NextResponse.json({
       batchResult,
@@ -344,6 +350,8 @@ export async function GET(request: Request) {
 
       let aiConfig: TenantAIConfig | null = null;
       let llmKeys: Set<string> | undefined;
+      let llmError: string | undefined;
+      let llmFallback = false;
       if (useLLM) {
         // Candidatas: top por valor, con conversación, sin diagnóstico cacheado.
         const candidates = sorted
@@ -352,25 +360,35 @@ export async function GET(request: Request) {
           .map(({ deal }) => deal.id);
         const limitCheck = await enforceConversationLimit(candidates.length);
         if (limitCheck.blocked) return limitCheck.response!;
-        aiConfig = await getTenantAIConfig(orgId);
-        llmKeys = new Set(candidates);
+        // Verifica credenciales ANTES del batch: si la key BYOK del tenant no
+        // funciona cae al gateway de plataforma; si nada funciona, reporta el
+        // error real a la UI en vez de fallar 25 veces en silencio.
+        const resolved = await resolveWorkingAIConfig(orgId);
+        aiConfig = resolved.config;
+        llmFallback = resolved.usedFallback;
+        llmError = resolved.config ? undefined : resolved.error;
+        if (aiConfig) llmKeys = new Set(candidates);
       }
 
-      const batchResult = await runForensicsPipeline(conversations, opps, {
+      const { batch: batchResult, llmOk } = await runForensicsPipeline(conversations, opps, {
         ai: aiConfig,
         cached,
         llmKeys,
       });
 
-      if (useLLM && llmKeys && llmKeys.size > 0) {
+      if (llmOk.size > 0) {
+        // Cachear SOLO diagnósticos que realmente salieron del LLM.
         await Promise.all(
           batchResult.conversations
-            .filter((c) => c.opportunityId && llmKeys!.has(c.opportunityId))
+            .filter((c) => c.opportunityId && llmOk.has(c.opportunityId))
             .map((c) =>
               saveLlmAnalysis(orgId, 'forense', c.opportunityId!, c.lossReason, aiConfig!.model),
             ),
         );
         llmAnalyzedAt = new Date().toISOString();
+      }
+      if (useLLM && !llmError && llmKeys && llmOk.size < llmKeys.size) {
+        llmError = `El LLM falló en ${llmKeys.size - llmOk.size} de ${llmKeys.size} conversaciones.`;
       }
 
       // Cobertura de la razón de pérdida nativa de GHL (ground truth del equipo).
@@ -383,7 +401,7 @@ export async function GET(request: Request) {
       }
 
       // El quota mensual mide análisis costosos (LLM); el regex local es gratis.
-      await incrementUsage('forense', llmKeys?.size ?? 0);
+      await incrementUsage('forense', llmOk.size);
 
       const totalConversations = batchResult.conversations.length;
       batchResult.conversations = batchResult.conversations.slice(0, RESPONSE_CONVERSATION_CAP);
@@ -396,8 +414,10 @@ export async function GET(request: Request) {
           source: 'sync',
           analyzedAt: new Date().toISOString(),
           llmAnalyzedAt,
-          llmAnalyzedCount: llmKeys?.size ?? 0,
+          llmAnalyzedCount: llmOk.size,
           llmCachedCount: cached.size,
+          llmError,
+          llmFallback,
           conversationCount: totalConversations,
           ghlLossReasonCounts,
           syncedAt: syncStatus.lastSyncedAt,
@@ -500,17 +520,35 @@ export async function GET(request: Request) {
       // último análisis LLM guardado por oportunidad (0 tokens) + regex para las nuevas.
       let batchResult;
       let llmAnalyzedAt: string | null = null;
+      let llmError: string | undefined;
+      let llmFallback = false;
+      let llmSaved = 0;
       if (useLLM) {
-        const aiConfig = await getTenantAIConfig(orgId);
-        batchResult = await runForensicsPipeline(conversations, opps, { ai: aiConfig });
-        await Promise.all(
-          batchResult.conversations
-            .filter((c) => c.opportunityId)
-            .map((c) =>
-              saveLlmAnalysis(orgId, 'forense', c.opportunityId!, c.lossReason, aiConfig.model),
-            ),
-        );
-        llmAnalyzedAt = new Date().toISOString();
+        const resolved = await resolveWorkingAIConfig(orgId);
+        llmFallback = resolved.usedFallback;
+        llmError = resolved.config ? undefined : resolved.error;
+        const { batch, llmOk } = await runForensicsPipeline(conversations, opps, {
+          ai: resolved.config,
+        });
+        batchResult = batch;
+        llmSaved = llmOk.size;
+        if (llmOk.size > 0) {
+          // Cachear SOLO diagnósticos que realmente salieron del LLM.
+          await Promise.all(
+            batch.conversations
+              .filter((c) => c.opportunityId && llmOk.has(c.opportunityId))
+              .map((c) =>
+                saveLlmAnalysis(
+                  orgId,
+                  'forense',
+                  c.opportunityId!,
+                  c.lossReason,
+                  resolved.config!.model,
+                ),
+              ),
+          );
+          llmAnalyzedAt = new Date().toISOString();
+        }
       } else {
         const cachedRecs = await getLlmAnalysis<LossReasonDiagnosis>(orgId, 'forense');
         const cached = new Map(cachedRecs.map((r) => [r.key, r.payload]));
@@ -518,7 +556,7 @@ export async function GET(request: Request) {
           (max, r) => (!max || r.analyzedAt > max ? r.analyzedAt : max),
           null,
         );
-        batchResult = await runForensicsPipeline(conversations, opps, { cached });
+        batchResult = (await runForensicsPipeline(conversations, opps, { cached })).batch;
       }
 
       // Track usage
@@ -530,6 +568,9 @@ export async function GET(request: Request) {
           mode: 'live',
           analyzedAt: new Date().toISOString(),
           llmAnalyzedAt,
+          llmAnalyzedCount: llmSaved,
+          llmError,
+          llmFallback,
           conversationCount: conversations.length,
           locationId,
           note: 'Datos reales desde GHL API del tenant.',

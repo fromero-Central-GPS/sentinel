@@ -18,6 +18,8 @@ type WonTrackData = {
   playbookSummary?: string | null;
   playbookAnalyzedAt?: string | null;
   topWinFactors?: { factor: string; count: number }[];
+  llmError?: string | null;
+  llmFallback?: boolean;
 };
 
 function timeAgo(iso?: string | null): string {
@@ -185,6 +187,21 @@ export default function WonTrackPage() {
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
           ⚠️ {error}
+        </div>
+      )}
+
+      {data.llmError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          🤖 El análisis IA no pudo ejecutarse: {data.llmError}{' '}
+          <a href="/settings" className="underline font-medium">
+            Verificar API key en Settings →
+          </a>
+        </div>
+      )}
+      {data.llmFallback && !data.llmError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          ⚠️ Tu API key de IA no funciona — se usó el gateway de la plataforma. Revisala en
+          Settings.
         </div>
       )}
 

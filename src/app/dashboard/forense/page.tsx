@@ -15,6 +15,9 @@ type ForenseResponse = {
     mode: 'live' | 'mock';
     analyzedAt: string;
     llmAnalyzedAt?: string | null;
+    llmAnalyzedCount?: number;
+    llmError?: string;
+    llmFallback?: boolean;
     note?: string;
     source?: string;
   };
@@ -372,6 +375,21 @@ export default function ForensePage() {
           )}
         </div>
       </div>
+
+      {_meta.llmError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          🤖 El análisis IA no pudo ejecutarse: {_meta.llmError}{' '}
+          <a href="/settings" className="underline font-medium">
+            Verificar API key en Settings →
+          </a>
+        </div>
+      )}
+      {_meta.llmFallback && !_meta.llmError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          ⚠️ Tu API key de IA no funciona — se usó el gateway de la plataforma. Revisala en
+          Settings.
+        </div>
+      )}
 
       {_meta.mode === 'live' &&
         (_meta.llmAnalyzedAt ? (

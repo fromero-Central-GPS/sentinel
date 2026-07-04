@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { decrypt } from './encryption';
-import { LLM_MODEL, type LLMAuth } from './llm';
+import { LLM_MODEL, pingLLM, type LLMAuth } from './llm';
 
 /** Proveedores/tier soportados y su modelo por defecto en el AI Gateway. */
 export const AI_TYPES = {
@@ -40,4 +40,34 @@ export async function getTenantAIConfig(orgId: string): Promise<TenantAIConfig> 
     model,
     apiKey: row?.aiApiKey ? decrypt(row.aiApiKey) : undefined,
   };
+}
+
+export interface WorkingAIConfig {
+  /** Config con la que el gateway respondió OK, o null si ninguna funciona. */
+  config: TenantAIConfig | null;
+  /** true si la key BYOK del tenant falló y se usó el gateway de plataforma. */
+  usedFallback: boolean;
+  /** Error del ping cuando la config del tenant no funcionó. */
+  error?: string;
+}
+
+/**
+ * Resuelve una config de IA que FUNCIONA, verificándola con un ping antes de
+ * gastar un batch de llamadas. Caso real (jul-2026): el tenant guardó una API
+ * key inválida en Settings → 25 llamadas fallaban en silencio y el regex se
+ * cacheaba como si fuera análisis LLM. Si la BYOK falla, cae al gateway de
+ * plataforma (OIDC); si tampoco, devuelve el error real para mostrarlo en UI.
+ */
+export async function resolveWorkingAIConfig(orgId: string): Promise<WorkingAIConfig> {
+  const tenant = await getTenantAIConfig(orgId);
+  const ping = await pingLLM(tenant);
+  if (ping.ok) return { config: tenant, usedFallback: false };
+
+  if (tenant.apiKey) {
+    const platform: TenantAIConfig = { ...tenant, apiKey: undefined };
+    const platformPing = await pingLLM(platform);
+    if (platformPing.ok) return { config: platform, usedFallback: true, error: ping.error };
+  }
+
+  return { config: null, usedFallback: false, error: ping.error };
 }

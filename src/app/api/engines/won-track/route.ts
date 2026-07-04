@@ -15,7 +15,7 @@ import {
   type CustomFieldMap,
 } from '@/lib/won-track-engine';
 import { summarizeWinningPlaybookLLM } from '@/lib/wontrack-llm';
-import { getTenantAIConfig } from '@/lib/ai-config';
+import { resolveWorkingAIConfig } from '@/lib/ai-config';
 import { getLlmAnalysis, saveLlmAnalysis } from '@/lib/llm-store';
 import { saveTenantThresholds } from '@/lib/won-track-store';
 import { getSyncedDeals, getSyncStatus } from '@/lib/deal-sync';
@@ -263,14 +263,33 @@ export async function GET(request: Request) {
     await incrementUsage('wonTrack', deals.length);
 
     // Fase 2: narrativa playbook por LLM.
+    let llmError: string | undefined;
+    let llmFallback = false;
     if (useLLM) {
-      // On-demand: corre el LLM y guarda el resultado en caché.
-      const aiConfig = await getTenantAIConfig(orgId);
-      const summary = await summarizeWinningPlaybookLLM(output, aiConfig);
-      if (summary) {
-        output.playbookSummary = summary;
-        output.playbookAnalyzedAt = new Date().toISOString();
-        await saveLlmAnalysis(orgId, 'won_track', 'playbook', summary, aiConfig.model);
+      // On-demand: verifica credenciales (BYOK → plataforma), corre el LLM y
+      // guarda el resultado. Si nada funciona, reporta el error real a la UI.
+      const resolved = await resolveWorkingAIConfig(orgId);
+      llmFallback = resolved.usedFallback;
+      if (!resolved.config) {
+        llmError = resolved.error ?? 'Sin credenciales de AI Gateway.';
+      } else {
+        const summary = await summarizeWinningPlaybookLLM(output, resolved.config);
+        if (summary) {
+          output.playbookSummary = summary;
+          output.playbookAnalyzedAt = new Date().toISOString();
+          await saveLlmAnalysis(orgId, 'won_track', 'playbook', summary, resolved.config.model);
+        } else {
+          llmError = 'El LLM no devolvió un playbook (ver logs).';
+        }
+      }
+      if (!output.playbookSummary) {
+        // Sin playbook nuevo: mostrar el último cacheado para no dejar la UI vacía.
+        const cached = await getLlmAnalysis<string>(orgId, 'won_track');
+        const pb = cached.find((r) => r.key === 'playbook');
+        if (pb) {
+          output.playbookSummary = pb.payload;
+          output.playbookAnalyzedAt = pb.analyzedAt;
+        }
       }
     } else {
       // Carga normal: muestra el último playbook guardado (0 tokens).
@@ -286,6 +305,8 @@ export async function GET(request: Request) {
       ...buildResponse(output, wonCount, wonCount + lostCount, avgTicket, 'live'),
       dataSource: usingSync ? 'sync' : 'direct',
       syncedAt,
+      llmError: llmError ?? null,
+      llmFallback,
     });
   } catch (err) {
     console.error('[Won Track] live error:', err);
