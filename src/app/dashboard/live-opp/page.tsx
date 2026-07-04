@@ -10,11 +10,21 @@ type Opportunity = {
   owner?: string | null;
   stage: string;
   daysSinceActivity: number | null;
+  daysOpen?: number;
+  isPastBenchmark?: boolean;
+  createdAt?: string;
   riskScore: number;
   value: number;
   riskLevel: string;
   recommendedActions: string[];
 };
+
+function formatDate(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
 type LiveOppData = {
   totalAtRisk: number;
@@ -192,6 +202,9 @@ export default function LiveOppPage() {
                     Sin actividad
                   </th>
                   <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">
+                    Abierta hace
+                  </th>
+                  <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">
                     Etapa
                   </th>
                   <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">
@@ -244,6 +257,18 @@ export default function LiveOppPage() {
                             `${opp.daysSinceActivity}d`
                           )}
                         </td>
+                        <td className="py-3 px-4" title={`Creada el ${formatDate(opp.createdAt)}`}>
+                          <span
+                            className={`text-sm font-mono ${opp.isPastBenchmark ? 'text-amber-600 font-semibold' : 'text-zinc-700'}`}
+                          >
+                            {opp.daysOpen !== undefined ? `${opp.daysOpen}d` : '—'}
+                          </span>
+                          {opp.createdAt && (
+                            <div className="text-[11px] text-zinc-400">
+                              {formatDate(opp.createdAt)}
+                            </div>
+                          )}
+                        </td>
                         <td className="py-3 px-4 text-sm text-zinc-500">{opp.stage || '—'}</td>
                         <td className="py-3 px-4 text-sm text-zinc-500">{opp.owner || '—'}</td>
                         <td className="py-3 px-4 text-sm text-zinc-700 font-mono">
@@ -255,7 +280,7 @@ export default function LiveOppPage() {
                       </tr>
                       {isExpanded && opp.recommendedActions.length > 0 && (
                         <tr className="bg-zinc-50">
-                          <td colSpan={7} className="px-4 pb-4 pt-0">
+                          <td colSpan={8} className="px-4 pb-4 pt-0">
                             <div className="space-y-1.5">
                               <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
                                 Acciones recomendadas

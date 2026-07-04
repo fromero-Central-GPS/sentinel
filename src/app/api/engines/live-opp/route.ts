@@ -36,6 +36,7 @@ export async function GET(request: Request) {
       opportunityName: string;
       comentarios: string;
       owner: string | null;
+      createdAt: string;
     }> = [];
 
     const mockOpps: OpenOpportunity[] = [
@@ -111,12 +112,13 @@ export async function GET(request: Request) {
           opportunityName: mockDeal[opp.id] ?? opp.name,
           comentarios: mockComentarios[opp.id] ?? '',
           owner: opp.assignedTo ? (mockOwners[opp.assignedTo] ?? null) : null,
+          createdAt: opp.createdAt,
         });
       }
     }
 
     const mappedOpps = analyzedOpps
-      .map(({ analysis: a, opportunityName, comentarios, owner }) => ({
+      .map(({ analysis: a, opportunityName, comentarios, owner, createdAt }) => ({
         id: a.opportunityId,
         name: a.contactName || a.opportunityId,
         opportunityName,
@@ -124,6 +126,9 @@ export async function GET(request: Request) {
         owner,
         stage: a.stage,
         daysSinceActivity: a.totalMessages === 0 ? null : a.daysSinceLastContact,
+        daysOpen: a.daysOpen,
+        isPastBenchmark: a.isPastBenchmark,
+        createdAt,
         riskScore: a.overallRiskScore,
         value: a.value,
         riskLevel: a.riskLevel,
@@ -201,6 +206,7 @@ export async function GET(request: Request) {
     opportunityName: string;
     comentarios: string;
     owner: string | null;
+    createdAt: string;
   }> = [];
 
   deals.forEach(({ opp, deal }, i) => {
@@ -217,12 +223,13 @@ export async function GET(request: Request) {
         opportunityName: opp.name ?? deal.name ?? '',
         comentarios,
         owner: deal.assignedTo ? (userMap[deal.assignedTo] ?? null) : null,
+        createdAt: deal.createdAt,
       });
     }
   });
 
   const mappedOpps = analyzedOpps
-    .map(({ analysis: a, opportunityName, comentarios, owner }) => ({
+    .map(({ analysis: a, opportunityName, comentarios, owner, createdAt }) => ({
       id: a.opportunityId,
       name: a.contactName || a.opportunityId,
       opportunityName,
@@ -231,6 +238,9 @@ export async function GET(request: Request) {
       stage: a.stage,
       // null = sin conversación (no mostrar el centinela 999d).
       daysSinceActivity: a.totalMessages === 0 ? null : a.daysSinceLastContact,
+      daysOpen: a.daysOpen,
+      isPastBenchmark: a.isPastBenchmark,
+      createdAt,
       riskScore: a.overallRiskScore,
       value: a.value,
       riskLevel: a.riskLevel,
