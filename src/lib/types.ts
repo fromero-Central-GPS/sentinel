@@ -3,7 +3,7 @@
  *
  * Antes cada motor definía su propio `GHLMessage` (3 copias) y su propia forma de
  * oportunidad (`GHLOpportunity` / `OpenOpportunity` / `GHLOpportunityInput`), y
- * cada ruta repetía el mapeo crudo→motor. Acá vive UN solo `Deal` y UN solo
+ * cada ruta repetía el mapeo crudo→motor. Aquí vive UN solo `Deal` y UN solo
  * `CanonicalMessage`, más los mappers desde los tipos crudos de GHL.
  *
  * Estos tipos son CRM-agnósticos a propósito: integrar otro CRM = escribir un

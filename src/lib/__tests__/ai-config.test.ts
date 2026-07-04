@@ -6,6 +6,7 @@ describe('AI por tier (gestionada por plataforma)', () => {
   beforeEach(() => {
     delete process.env.AI_GATEWAY_API_KEY;
     delete process.env.VERCEL_OIDC_TOKEN;
+    delete process.env.VERCEL;
   });
 
   it('cada tier tiene un modelo asignado (el tenant nunca lo ve)', () => {
@@ -26,6 +27,11 @@ describe('AI por tier (gestionada por plataforma)', () => {
 
   it('AI_GATEWAY_API_KEY de plataforma también habilita', () => {
     process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    expect(isLLMEnabled()).toBe(true);
+  });
+
+  it('en runtime de Vercel (VERCEL=1) no se bloquea: el OIDC se resuelve en la llamada', () => {
+    process.env.VERCEL = '1';
     expect(isLLMEnabled()).toBe(true);
   });
 });

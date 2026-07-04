@@ -53,12 +53,16 @@ export const LLM_MODEL = process.env.SENTINEL_LLM_MODEL ?? 'deepseek/deepseek-v3
 
 /**
  * ¿Hay credencial de plataforma para el AI Gateway?
- * - Local/CI: `AI_GATEWAY_API_KEY`.
- * - En Vercel: el OIDC token (`VERCEL_OIDC_TOKEN`) se inyecta solo.
+ * - Local/CI: `AI_GATEWAY_API_KEY` o `VERCEL_OIDC_TOKEN` (de `vercel env pull`).
+ * - En Vercel (`VERCEL=1`): el OIDC se resuelve en RUNTIME vía el request
+ *   context de @vercel/oidc — VERCEL_OIDC_TOKEN puede no estar en env, así que
+ *   ahí no se bloquea: se intenta la llamada y pingLLM reporta el error real.
  * Si no hay ninguna, los motores usan su fallback de regex.
  */
 export function isLLMEnabled(): boolean {
-  return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
+  return Boolean(
+    process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL,
+  );
 }
 
 function gatewayOptions(attribution?: LLMAttribution) {

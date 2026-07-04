@@ -499,10 +499,10 @@ export default function OnboardingPage() {
               <h1 className="text-2xl font-bold">¡Todo listo!</h1>
               <p className="text-zinc-500">
                 {ghlStatus === 'configured' && metaStatus === 'configured'
-                  ? 'Tenés GHL y WhatsApp Business conectados. Ya podés empezar a analizar conversaciones.'
+                  ? 'Tienes GHL y WhatsApp Business conectados. Ya puedes empezar a analizar conversaciones.'
                   : ghlStatus === 'configured'
-                    ? 'GHL está conectado. Podés configurar WhatsApp más tarde desde Settings.'
-                    : 'Podés completar la configuración de GHL y WhatsApp en cualquier momento desde Settings.'}
+                    ? 'GHL está conectado. Puedes configurar WhatsApp más tarde desde Settings.'
+                    : 'Puedes completar la configuración de GHL y WhatsApp en cualquier momento desde Settings.'}
               </p>
               <button
                 onClick={() => router.push('/dashboard')}

@@ -248,7 +248,7 @@ export default function ForensePage() {
         'El API Token guardado en Settings no es válido. Verifica que sea el token correcto del sub-account de GHL y vuelve a guardarlo.';
     } else if (isGhl403) {
       title = 'Sin permisos en GHL (403)';
-      hint = 'El token no tiene permisos de Oportunidades. Revisá los scopes del token en GHL.';
+      hint = 'El token no tiene permisos de Oportunidades. Revisa los scopes del token en GHL.';
     } else if (isGhlError) {
       title = 'Error al conectar con GHL';
       hint = `Detalle: ${error}`;
@@ -386,7 +386,7 @@ export default function ForensePage() {
       )}
       {_meta.llmFallback && !_meta.llmError && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-          ⚠️ Tu API key de IA no funciona — se usó el gateway de la plataforma. Revisala en
+          ⚠️ Tu API key de IA no funciona — se usó el gateway de la plataforma. Revísala en
           Settings.
         </div>
       )}
@@ -395,11 +395,11 @@ export default function ForensePage() {
         (_meta.llmAnalyzedAt ? (
           <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs text-indigo-800">
             Razón de pérdida por IA · último análisis {timeAgo(_meta.llmAnalyzedAt)}
-            {runningAi ? ' · actualizando…' : ' · apretá “Re-correr IA” para actualizar'}
+            {runningAi ? ' · actualizando…' : ' · presiona “Re-correr IA” para actualizar'}
           </div>
         ) : (
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-xs text-zinc-600">
-            Mostrando clasificación rápida (regex). Apretá “Correr análisis IA” para clasificar con
+            Mostrando clasificación rápida (regex). Presiona “Correr análisis IA” para clasificar con
             el modelo (se guarda para la próxima vez).
           </div>
         ))}
