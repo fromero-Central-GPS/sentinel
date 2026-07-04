@@ -377,11 +377,8 @@ export default function ForensePage() {
       </div>
 
       {_meta.llmError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          🤖 El análisis IA no pudo ejecutarse: {_meta.llmError}{' '}
-          <a href="/settings" className="underline font-medium">
-            Verificar API key en Settings →
-          </a>
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          🤖 {_meta.llmError}
         </div>
       )}
       {_meta.llmFallback && !_meta.llmError && (

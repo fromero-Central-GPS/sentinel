@@ -52,6 +52,7 @@ export async function diagnoseLossReasonLLM(
   messages: CanonicalMessage[],
   auth?: LLMAuth,
   onUsage?: (usage: LLMUsage) => void,
+  onError?: (message: string) => void,
 ): Promise<LossReasonDiagnosis | null> {
   // Limpia emails (hilos citados/firmas) y trunca priorizando el FINAL de la
   // conversación, que es donde suele estar la razón de pérdida.
@@ -67,5 +68,6 @@ export async function diagnoseLossReasonLLM(
       ? { ...auth.attribution, tags: [...(auth.attribution.tags ?? []), 'engine:forense'] }
       : undefined,
     onUsage,
+    onError,
   });
 }

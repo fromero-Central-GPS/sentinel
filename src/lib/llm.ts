@@ -84,6 +84,8 @@ export async function generateStructured<T>(opts: {
   attribution?: LLMAttribution;
   /** Callback con los tokens reales consumidos (metering por tenant). */
   onUsage?: (usage: LLMUsage) => void;
+  /** Callback con el mensaje de error real cuando la llamada falla. */
+  onError?: (message: string) => void;
 }): Promise<T | null> {
   if (!isLLMEnabled()) return null;
   const modelId = opts.model ?? LLM_MODEL;
@@ -103,6 +105,7 @@ export async function generateStructured<T>(opts: {
     return object;
   } catch (err) {
     console.error('[LLM] generateObject falló, se usará fallback:', err);
+    opts.onError?.(err instanceof Error ? err.message : String(err));
     return null;
   }
 }
