@@ -91,7 +91,68 @@ function SummaryCard({
   );
 }
 
-function ConversationRow({ item }: { item: ConversationAnalysis }) {
+function GhlActions({ item }: { item: ConversationAnalysis }) {
+  const [busy, setBusy] = useState<'tag' | 'task' | null>(null);
+  const [done, setDone] = useState<{ action: string; msg: string } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async (action: 'tag' | 'task') => {
+    setBusy(action);
+    setErr(null);
+    try {
+      const res = await fetch('/api/actions/ghl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          contactId: item.contactId,
+          contactName: item.contactName,
+          lossReason: item.lossReason.primaryReason,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.detail ? `${data.error} — ${data.detail}` : data.error);
+      setDone({
+        action,
+        msg:
+          action === 'tag'
+            ? `Agregado a la ola: ${(data.tags ?? []).join(', ')}`
+            : 'Tarea creada en GHL',
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="sm:col-span-2 border-t border-zinc-200 pt-3 mt-1">
+      <p className="font-medium text-zinc-700 mb-2">Acciones en GHL</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => run('task')}
+          disabled={busy !== null}
+          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {busy === 'task' ? 'Creando…' : 'Crear tarea en GHL'}
+        </button>
+        <button
+          onClick={() => run('tag')}
+          disabled={busy !== null}
+          className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+          title="Suma el contacto a una ola de reactivación segmentada por razón de pérdida"
+        >
+          {busy === 'tag' ? 'Etiquetando…' : 'Agregar a ola de reactivación'}
+        </button>
+        {done && <span className="text-xs text-emerald-700">✓ {done.msg}</span>}
+        {err && <span className="text-xs text-red-600">⚠️ {err}</span>}
+      </div>
+    </div>
+  );
+}
+
+function ConversationRow({ item, live }: { item: ConversationAnalysis; live: boolean }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <>
@@ -181,6 +242,7 @@ function ConversationRow({ item }: { item: ConversationAnalysis }) {
                         : 'Conversación activa'}
                 </p>
               </div>
+              {live && item.contactId && <GhlActions item={item} />}
             </div>
           </td>
         </tr>
@@ -488,7 +550,11 @@ export default function ForensePage() {
               {batchResult.conversations
                 .sort((a, b) => b.recoverability.totalScore - a.recoverability.totalScore)
                 .map((item) => (
-                  <ConversationRow key={item.conversationId} item={item} />
+                  <ConversationRow
+                    key={item.conversationId}
+                    item={item}
+                    live={_meta.mode === 'live'}
+                  />
                 ))}
               {batchResult.conversations.length === 0 && (
                 <tr>

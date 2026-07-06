@@ -52,6 +52,34 @@ AI Gateway (filtrar por tag `tenant:`).
 Objetivo: pasar de "dashboard que hay que mirar" a "herramienta que empuja la
 venta". El usuario confirmó **WhatsApp** como canal para los vendedores.
 
+> **Estado (branch `p1-activacion`): implementado, falta deploy + config.**
+> tsc/lint/tests verdes. Pendiente antes de que sirva en prod:
+> 1. Setear env **`CRON_SECRET`** en Vercel (los cron de `vercel.json` se auto-
+>    autentican con `Authorization: Bearer $CRON_SECRET`; sin la env, los
+>    endpoints quedan abiertos — `verifyCronAuth` es fail-open solo en dev).
+> 2. Deploy: `vercel deploy --prod` (los crons se registran al deployar).
+> 3. Para el digest real: aprobar una **plantilla Meta** con UNA variable de
+>    cuerpo y setear `WHATSAPP_DIGEST_TEMPLATE` (+ `WHATSAPP_DIGEST_LANG`, def.
+>    `es`); cargar credenciales Meta por tenant en Settings; y que los usuarios
+>    de GHL tengan **teléfono** (el digest agrupa por `assignedTo` y envía al
+>    `phone` del vendedor). Sin todo eso el cron hace **dry-run** y devuelve el
+>    preview de cada mensaje en el JSON de respuesta.
+> Qué se construyó:
+> - `src/lib/engine-runners.ts`: núcleo por-tenant sin Clerk (`listGhlTenants`,
+>   `runSyncForTenant`, `runForenseForTenant`, `runWonTrackForTenant`,
+>   `verifyCronAuth`). Respeta ping-antes-de-batch, concurrencia 2 y cachear
+>   solo diagnósticos reales del LLM.
+> - Crons `GET /api/cron/{sync,forense,won-track,digest}` (`vercel.json`):
+>   sync c/2h, forense 06:00 UTC, won-track lun 07:00 UTC, digest 12:00 UTC
+>   (~08:00 Santiago). `maxDuration=300`.
+> - `src/lib/whatsapp.ts` + `src/lib/digest.ts`: digest por vendedor desde el
+>   funnel sincronizado (Live Opp crítico/alto), envío por Meta Cloud API.
+> - 1-click Forense→GHL: `POST /api/actions/ghl` (`tag`/`task`) + botones en la
+>   fila expandida de la tabla de Forense. La ola se segmenta por razón
+>   (`reactivation_wave_YYYYMMDD` + `reactivation_<angle>`).
+> - Helpers de escritura en `ghl-client.ts`: `addContactTags`,
+>   `createContactTask`, `fetchUsersDetailed` (con teléfono).
+
 ### P1-1 Corridas programadas (cron)
 
 - Vercel crons (`vercel.json` o `crons` en config): Forense nocturno (con
