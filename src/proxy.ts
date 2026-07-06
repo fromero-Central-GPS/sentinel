@@ -13,6 +13,10 @@ export default clerkMiddleware(async (auth, req) => {
     pathname.startsWith('/sign-up') ||
     pathname.startsWith('/pricing') ||
     pathname.startsWith('/api/webhooks') ||
+    // Cron jobs de plataforma: no llevan sesión Clerk; se autentican en el
+    // handler con CRON_SECRET (ver verifyCronAuth). Sin este bypass el
+    // middleware los redirige a sign-in (307) y el cron nunca corre.
+    pathname.startsWith('/api/cron') ||
     pathname.startsWith('/api/billing/plans');
 
   if (!isPublicRoute && !userId) {
