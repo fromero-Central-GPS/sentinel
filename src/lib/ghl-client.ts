@@ -79,6 +79,39 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}`, Version: GHL_VERSION };
 }
 
+/**
+ * POST a GHL con reintento ante 429 (mismo criterio que `ghlFetch`). Se usa para
+ * las acciones de escritura (tags, tareas). Lanza si la respuesta no es OK.
+ */
+async function ghlPost(
+  path: string,
+  token: string,
+  body: unknown,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<unknown> {
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${GHL_BASE}${path}`, {
+      method: 'POST',
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const waitMs =
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 600 * 2 ** attempt;
+      await new Promise((r) => setTimeout(r, Math.min(waitMs, 8000)));
+      continue;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`GHL POST ${path} ${res.status}: ${text}`);
+    }
+    return res.json().catch(() => ({}));
+  }
+}
+
 /** Reintenta ante 429 (rate limit) con backoff, respetando Retry-After si viene. */
 async function ghlFetch(path: string, token: string, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const MAX_RETRIES = 3;
@@ -284,6 +317,65 @@ export async function fetchUsers({
   const map: Record<string, string> = {};
   for (const u of data.users ?? []) map[u.id] = u.name || u.email || u.id;
   return map;
+}
+
+/**
+ * Usuarios de la location con detalle (nombre + teléfono), para el digest de
+ * WhatsApp: necesitamos el número de cada vendedor para enviarle su mensaje.
+ * GHL expone `phone` en algunos usuarios; queda vacío si no está cargado.
+ */
+export interface GhlUser {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
+export async function fetchUsersDetailed({
+  token,
+  locationId,
+}: GhlCredentials): Promise<GhlUser[]> {
+  const res = await ghlFetch(`/users/?locationId=${locationId}`, token);
+  if (!res.ok) return [];
+  const data = (await res.json()) as {
+    users?: Array<{ id: string; name?: string; firstName?: string; lastName?: string; email?: string; phone?: string }>;
+  };
+  return (data.users ?? []).map((u) => ({
+    id: u.id,
+    name: u.name || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || u.id,
+    email: u.email,
+    phone: u.phone?.trim() || undefined,
+  }));
+}
+
+// ─── Acciones de escritura (P1-3: 1-click Forense → GHL) ──────────────────
+
+/** Agrega tags a un contacto (p.ej. la ola de reactivación). */
+export async function addContactTags(
+  { token }: GhlCredentials,
+  contactId: string,
+  tags: string[],
+): Promise<void> {
+  await ghlPost(`/contacts/${contactId}/tags`, token, { tags });
+}
+
+/**
+ * Crea una tarea sobre un contacto (seguimiento manual del vendedor).
+ * `dueDate` en ISO; por defecto mañana. GHL exige un dueDate.
+ */
+export async function createContactTask(
+  { token }: GhlCredentials,
+  contactId: string,
+  { title, body, dueDate }: { title: string; body?: string; dueDate?: string },
+): Promise<{ id?: string }> {
+  const due = dueDate ?? new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  const result = (await ghlPost(`/contacts/${contactId}/tasks`, token, {
+    title,
+    body: body ?? '',
+    dueDate: due,
+    completed: false,
+  })) as { task?: { id?: string }; id?: string };
+  return { id: result.task?.id ?? result.id };
 }
 
 /** Verifica credenciales contra el endpoint de location. */
