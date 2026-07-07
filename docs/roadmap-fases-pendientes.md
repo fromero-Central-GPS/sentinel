@@ -143,7 +143,20 @@ venta". El usuario confirmó **WhatsApp** como canal para los vendedores.
   las recomendaciones" con la tasa de recuperación. (Extensión futura: registrar
   también cuando se MUESTRA una recomendación de Live Opp, no solo al actuar.)
 
-## Fase 4 — Split the Funnel (Refine Labs)
+## Fase 4 — Split the Funnel (Refine Labs)  ← SIGUIENTE (en otro workspace)
+
+> **P1 y P2 están mergeados y DEPLOYADOS a prod** (ver notas de estado arriba).
+> Fase 4 es el próximo pickup; se planeó hacer en un workspace nuevo desde
+> `main` actualizado. Arranque sugerido:
+> - Taxonomía ya tiene `INTENT_CLASSES = ['declarada','creada','desconocida']`
+>   (`src/lib/taxonomy.ts`) — el contrato existe, falta el clasificador.
+> - Clasificar por `Deal.attributions` (utmSessionSource/medium, `isFirst`) +
+>   el primer mensaje inbound de la conversación (ya en `deal_messages`).
+> - Reusar el patrón de cohortes de P2 (`src/lib/comparative.ts`): agrupar el
+>   funnel sincronizado por bucket y comparar conversion rate / lead-to-win /
+>   sales velocity / ticket. Datos ya en BD (`deals`/`deal_messages`), sin
+>   llamadas nuevas a GHL.
+> - Vista nueva en dashboard (mismo layout que Won Track/Forense).
 
 - Segmentar pipeline por intención de entrada: **Declarada** (demo/precio/
   contacto directo) vs **Creada** (contenido/feria/ads fríos), usando
