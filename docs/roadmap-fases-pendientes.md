@@ -117,9 +117,10 @@ venta". El usuario confirmó **WhatsApp** como canal para los vendedores.
 
 ## P2 — Inteligencia comparativa
 
-> **Estado (branch `p2-comparativa`): 3 de 4 ítems implementados.** tsc/lint/
-> 42 tests verdes. **Antes de deploy: aplicar migración 0008** a la BD de prod
-> (`ghl_lost_reason_map`) con el psql del runbook. Luego `vercel deploy --prod`.
+> **Estado (branch `p2-comparativa`): 4 de 4 ítems implementados.** tsc/lint/
+> 42 tests verdes. **Antes de deploy: aplicar migraciones 0008 y 0009** a la BD
+> de prod (`ghl_lost_reason_map` + tabla `recommendation_events`) con el psql
+> del runbook. Luego `vercel deploy --prod`.
 
 - ✅ **Lift de factores won vs lost** — `src/lib/comparative.ts`
   (`computeFactorLift`, suavizado Laplace). Won Track carga los perdidos
@@ -135,12 +136,12 @@ venta". El usuario confirmó **WhatsApp** como canal para los vendedores.
   mapearlo a taxonomía. Forense muestra "Razón registrada por el equipo" y el
   **% de acuerdo IA ↔ equipo** (`computeCalibration`, sobre deals con ambas
   señales). No hay endpoint público de GHL para los nombres → etiquetado manual.
-- ⏳ **Outcome tracking** (PENDIENTE): registrar qué recomendaciones se mostraron
-  por deal y si cerró → medir uplift. Diseño propuesto: tabla
-  `recommendation_events` (tenant, dealGhlId, engine, payload, shownAt) escrita
-  cuando se toma una acción 1-click o se muestra Live Opp; resolver outcome
-  re-cruzando con el status actual de `deals`; métrica de uplift = close-rate de
-  deals con recomendación vs baseline. Es el argumento de venta de Sentinel.
+- ✅ **Outcome tracking** — migración 0009 + tabla `recommendation_events` +
+  `src/lib/outcomes.ts`. Cada acción 1-click de Forense registra un evento; el
+  outcome se resuelve cruzando el deal con su status ACTUAL en `deals` (perdido
+  al actuar y hoy won/open = recuperado). Forense muestra la tarjeta "Impacto de
+  las recomendaciones" con la tasa de recuperación. (Extensión futura: registrar
+  también cuando se MUESTRA una recomendación de Live Opp, no solo al actuar.)
 
 ## Fase 4 — Split the Funnel (Refine Labs)
 
