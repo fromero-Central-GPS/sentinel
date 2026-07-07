@@ -117,19 +117,30 @@ venta". El usuario confirmó **WhatsApp** como canal para los vendedores.
 
 ## P2 — Inteligencia comparativa
 
-- **Lift de factores won vs lost** (la pregunta fundacional: qué separa ganar
-  de perder). Ya hay won y lost completos en BD. Computar P(factor|won) vs
-  P(factor|lost) por cada `WinFactor`/señal y mostrar el ratio en Won Track
-  (reemplaza "frecuencia entre ganadores", que no discrimina).
-- **Benchmarks segmentados** por tamaño de flota (tag `1 vehículo` / `2 a 9` /
-  `10 a 49` / `+50`): thresholds por segmento en vez de globales (un deal de
-  $60K y uno de $41M no comparten ciclo).
-- **Etiquetas de `lostReasonId`**: mapear los IDs de GHL a nombres (no hay
-  endpoint público documentado; opciones: config manual por tenant en settings
-  o scrape del location settings). Mostrar "razón registrada por el equipo" al
-  lado del diagnóstico IA + % de acuerdo (calibración del LLM).
-- **Outcome tracking**: registrar qué recomendaciones se mostraron por deal y
-  si cerró → medir uplift del producto (argumento de venta de Sentinel).
+> **Estado (branch `p2-comparativa`): 3 de 4 ítems implementados.** tsc/lint/
+> 42 tests verdes. **Antes de deploy: aplicar migración 0008** a la BD de prod
+> (`ghl_lost_reason_map`) con el psql del runbook. Luego `vercel deploy --prod`.
+
+- ✅ **Lift de factores won vs lost** — `src/lib/comparative.ts`
+  (`computeFactorLift`, suavizado Laplace). Won Track carga los perdidos
+  sincronizados, extrae los mismos factores (`analyzeWonDeal`) y muestra tabla
+  "Qué separa ganar de perder" (ganados% vs perdidos% + lift). Cae a la lista de
+  frecuencia si aún no hay perdidos. Tests en `comparative.test.ts`.
+- ✅ **Benchmarks segmentados** por tamaño de flota — `computeSegmentedThresholds`
+  (muestra mín. 3 por segmento); tarjeta "Benchmarks por tamaño de flota" en Won
+  Track. (Pendiente menor: que Live Opp elija el threshold del segmento del deal
+  en vez del global.)
+- ✅ **Etiquetas de `lostReasonId`** — `src/lib/lost-reasons.ts` +
+  `/api/settings/lost-reasons` + sección en Settings para nombrar cada id y
+  mapearlo a taxonomía. Forense muestra "Razón registrada por el equipo" y el
+  **% de acuerdo IA ↔ equipo** (`computeCalibration`, sobre deals con ambas
+  señales). No hay endpoint público de GHL para los nombres → etiquetado manual.
+- ⏳ **Outcome tracking** (PENDIENTE): registrar qué recomendaciones se mostraron
+  por deal y si cerró → medir uplift. Diseño propuesto: tabla
+  `recommendation_events` (tenant, dealGhlId, engine, payload, shownAt) escrita
+  cuando se toma una acción 1-click o se muestra Live Opp; resolver outcome
+  re-cruzando con el status actual de `deals`; métrica de uplift = close-rate de
+  deals con recomendación vs baseline. Es el argumento de venta de Sentinel.
 
 ## Fase 4 — Split the Funnel (Refine Labs)
 
