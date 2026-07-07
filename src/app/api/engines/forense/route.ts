@@ -39,6 +39,7 @@ import {
   resolveTeamReasons,
   computeCalibration,
 } from '@/lib/lost-reasons';
+import { getOutcomeStats } from '@/lib/outcomes';
 
 /** Máximo de conversaciones que analiza el LLM por corrida on-demand (costo). */
 const LLM_BATCH_SIZE = 25;
@@ -448,11 +449,13 @@ export async function GET(request: Request) {
       batchResult.conversations = batchResult.conversations.slice(0, RESPONSE_CONVERSATION_CAP);
 
       const syncStatus = await getSyncStatus(orgId);
+      const outcomes = await getOutcomeStats(orgId);
       return NextResponse.json({
         batchResult,
         _meta: {
           mode: 'live',
           source: 'sync',
+          outcomes,
           analyzedAt: new Date().toISOString(),
           llmAnalyzedAt,
           llmAnalyzedCount: llmResults.size,

@@ -22,6 +22,14 @@ type ForenseResponse = {
     source?: string;
     teamLossReasons?: { id: string; name: string; reason?: string; count: number }[];
     calibration?: { comparable: number; agree: number; agreement: number };
+    outcomes?: {
+      events: number;
+      dealsActed: number;
+      recovered: number;
+      recoveredWon: number;
+      recoveryRate: number;
+      valueRecovered: number;
+    };
   };
   error?: string;
   detail?: string;
@@ -110,6 +118,8 @@ function GhlActions({ item }: { item: ConversationAnalysis }) {
           contactId: item.contactId,
           contactName: item.contactName,
           lossReason: item.lossReason.primaryReason,
+          opportunityId: item.opportunityId,
+          value: item.opportunityValue,
         }),
       });
       const data = await res.json();
@@ -530,6 +540,30 @@ export default function ForensePage() {
                 </span>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Uplift: recomendaciones aplicadas y recuperación — P2 outcome tracking */}
+      {_meta.outcomes && _meta.outcomes.dealsActed > 0 && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-emerald-800">
+                Impacto de las recomendaciones
+              </h2>
+              <p className="text-xs text-emerald-700 mt-0.5">
+                {_meta.outcomes.dealsActed} deals perdidos con acción aplicada ·{' '}
+                {_meta.outcomes.recovered} recuperados ({_meta.outcomes.recoveredWon} ganados) ·{' '}
+                {formatCLP(_meta.outcomes.valueRecovered)} recuperados
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-3xl font-bold text-emerald-600">
+                {Math.round(_meta.outcomes.recoveryRate * 100)}%
+              </p>
+              <p className="text-xs text-emerald-700">tasa de recuperación</p>
+            </div>
           </div>
         </div>
       )}

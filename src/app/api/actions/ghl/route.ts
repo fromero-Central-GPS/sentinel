@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { decrypt } from '@/lib/encryption';
 import { addContactTags, createContactTask } from '@/lib/ghl-client';
+import { recordRecommendationEvent } from '@/lib/outcomes';
 import type { LossReason } from '@/lib/taxonomy';
 
 /**
@@ -62,6 +63,10 @@ type ActionBody = {
   contactId: string;
   contactName?: string;
   lossReason?: LossReason;
+  /** Oportunidad (ghlId) — para outcome tracking (P2). */
+  opportunityId?: string;
+  /** Valor del deal al momento de actuar (uplift ponderado por $). */
+  value?: number;
 };
 
 export async function POST(request: Request) {
@@ -93,11 +98,28 @@ export async function POST(request: Request) {
   const reason: LossReason = body.lossReason ?? 'desconocido';
   const playbook = REASON_PLAYBOOK[reason] ?? REASON_PLAYBOOK.desconocido;
 
+  // Outcome tracking: registra que el equipo actuó sobre esta recomendación.
+  // Forense analiza deals perdidos → statusAtEvent 'lost'. dealGhlId prioriza la
+  // oportunidad; si no vino, cae al contacto.
+  const recordOutcome = (extra: unknown) =>
+    recordRecommendationEvent({
+      tenantId: orgId,
+      dealGhlId: body.opportunityId ?? body.contactId,
+      contactId: body.contactId,
+      engine: 'forense',
+      action: body.action,
+      reason,
+      statusAtEvent: 'lost',
+      valueAtEvent: body.value,
+      payload: extra,
+    });
+
   try {
     if (body.action === 'tag') {
       const wave = currentWaveTag();
       const tags = [wave, `reactivation_${playbook.angle}`];
       await addContactTags(creds, body.contactId, tags);
+      await recordOutcome({ tags });
       return NextResponse.json({ ok: true, action: 'tag', tags });
     }
 
@@ -107,6 +129,7 @@ export async function POST(request: Request) {
       title: `Reactivar oportunidad perdida${name}`,
       body: playbook.task,
     });
+    await recordOutcome({ taskId: result.id });
     return NextResponse.json({ ok: true, action: 'task', taskId: result.id });
   } catch (err) {
     return NextResponse.json(
