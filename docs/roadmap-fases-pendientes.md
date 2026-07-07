@@ -143,27 +143,38 @@ venta". El usuario confirmó **WhatsApp** como canal para los vendedores.
   las recomendaciones" con la tasa de recuperación. (Extensión futura: registrar
   también cuando se MUESTRA una recomendación de Live Opp, no solo al actuar.)
 
-## Fase 4 — Split the Funnel (Refine Labs)  ← SIGUIENTE (en otro workspace)
+## Fase 4 — Split the Funnel (Refine Labs)
 
-> **P1 y P2 están mergeados y DEPLOYADOS a prod** (ver notas de estado arriba).
-> Fase 4 es el próximo pickup; se planeó hacer en un workspace nuevo desde
-> `main` actualizado. Arranque sugerido:
-> - Taxonomía ya tiene `INTENT_CLASSES = ['declarada','creada','desconocida']`
->   (`src/lib/taxonomy.ts`) — el contrato existe, falta el clasificador.
-> - Clasificar por `Deal.attributions` (utmSessionSource/medium, `isFirst`) +
->   el primer mensaje inbound de la conversación (ya en `deal_messages`).
-> - Reusar el patrón de cohortes de P2 (`src/lib/comparative.ts`): agrupar el
->   funnel sincronizado por bucket y comparar conversion rate / lead-to-win /
->   sales velocity / ticket. Datos ya en BD (`deals`/`deal_messages`), sin
->   llamadas nuevas a GHL.
-> - Vista nueva en dashboard (mismo layout que Won Track/Forense).
+> **Estado (branch `split-the-funnel-fase4`): implementado.** tsc limpio, lint
+> sin errores nuevos, 56 tests verdes (14 nuevos de split-funnel). Es 100%
+> cómputo sobre la BD ya sincronizada — **no requiere migración, ni llamadas
+> nuevas a GHL, ni LLM**. Pendiente: PR a `main` + `vercel deploy --prod`.
 
-- Segmentar pipeline por intención de entrada: **Declarada** (demo/precio/
-  contacto directo) vs **Creada** (contenido/feria/ads fríos), usando
-  `attributions` + primer mensaje de la conversación.
-- Comparar por bucket: conversion rate, lead-to-win, sales velocity, ticket.
-- Vista nueva en dashboard. Depende de datos ya sincronizados; hacer después
-  de P2 (reusa el mismo motor de cohortes).
+Qué se construyó:
+- **Clasificador de intención** — `src/lib/split-funnel.ts` `classifyIntent(deal,
+  messages)` → `declarada` | `creada` | `desconocida`. Prioriza el **primer
+  mensaje inbound** (lo que el cliente dijo — la señal más fuerte en un CRM
+  conversacional): pide precio/cotización/demo/contacto → declarada; viene de
+  ebook/webinar/feria/newsletter → creada. Cae a `Deal.attributions` (UTM
+  source/medium, `isFirst`) como desempate; sin señal → desconocida.
+- **Motor de cohortes** — `computeSplitFunnel(classified)` agrupa el funnel por
+  bucket y calcula por cohorte: conversión (won/(won+lost)), ciclo de venta
+  (promedio+mediana sobre ganados, usando `lastStageChangeAt` como Won Track),
+  ticket promedio, revenue ganado y pipeline abierto. `insight` deriva el ratio
+  de conversión declarada vs creada y la brecha de ciclo.
+- **API** — `GET /api/engines/split-funnel` (`mode=mock|live`). Live lee
+  `getSyncedDeals` de won/lost/open, clasifica y computa; gating con el mismo
+  `enforceMotorAccess('wonTrack')` (vista analítica sobre el mismo funnel). Sin
+  sync devuelve buckets vacíos con la pista de sincronizar.
+- **Vista** — `src/app/dashboard/split-funnel/page.tsx` + item "Split Funnel" en
+  el nav (`dashboard/layout.tsx`). Tarjetas declarada (esmeralda) vs creada
+  (violeta) con conversión/ciclo/ticket + tabla comparativa + insight. Toggle
+  GHL API / Demo y botón de sync, como Won Track.
+
+Extensiones futuras: net-new ARR y CAC por bucket (requieren costo de
+adquisición, que hoy no está en la BD); que Live Opp muestre el bucket de cada
+deal abierto; clasificador LLM para los `desconocida` que hoy caen por falta de
+keyword.
 
 ## Menores
 
