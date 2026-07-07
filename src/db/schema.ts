@@ -41,6 +41,10 @@ export const appSettings = pgTable('app_settings', {
   // Si son null, el motor cae a sus defaults (ver DEFAULT_FIELD_MAP).
   ghlFieldPlan: text('ghl_field_plan'),
   ghlFieldEquipos: text('ghl_field_equipos'),
+  // Mapa lostReasonId (GHL) → { name, reason? } serializado (JSON). GHL no expone
+  // los nombres de las razones de pérdida por API; el tenant las etiqueta a mano
+  // (P2). `reason` (código de taxonomía) habilita la calibración IA vs equipo.
+  ghlLostReasonMap: text('ghl_lost_reason_map'),
   // Config de IA por tenant (tier). Si son null → default de plataforma + OIDC.
   aiType: text('ai_type'), // proveedor/tier: deepseek | anthropic | openai | custom
   aiModel: text('ai_model'), // slug del AI Gateway, ej: deepseek/deepseek-v3.2
@@ -185,3 +189,28 @@ export const llmAnalysis = pgTable(
   },
   (t) => [unique('llm_analysis_tenant_engine_key_unique').on(t.tenantId, t.engine, t.key)],
 );
+
+// ─── Outcome tracking (P2) ────────────────────────────────────────────────
+//
+// Registra cada vez que el equipo ACTÚA sobre una recomendación de Sentinel
+// (acción 1-click en Forense: tag de reactivación o tarea). El outcome se
+// resuelve después cruzando `dealGhlId` con el status actual del deal en
+// `deals`: un deal que estaba perdido al actuar y hoy está won/open = recuperado.
+// Es la base para medir el uplift del producto (argumento de venta).
+export const recommendationEvents = pgTable('recommendation_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: text('tenant_id').notNull(),
+  /** Oportunidad (ghlId) sobre la que se actuó. */
+  dealGhlId: text('deal_ghl_id').notNull(),
+  contactId: text('contact_id'),
+  engine: text('engine').notNull(), // forense | live_opp
+  action: text('action').notNull(), // tag | task
+  /** Razón de pérdida / ángulo de la recomendación aplicada. */
+  reason: text('reason'),
+  /** Status del deal al momento de actuar (para medir el cambio después). */
+  statusAtEvent: text('status_at_event'),
+  /** Valor del deal al momento de actuar (para uplift ponderado por $). */
+  valueAtEvent: text('value_at_event'),
+  payload: text('payload'), // JSON con detalle (tags aplicados, título, etc.)
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});

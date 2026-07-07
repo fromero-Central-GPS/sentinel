@@ -191,6 +191,23 @@ export async function getSyncStatus(tenantId: string): Promise<{
   return { counts, lastSyncedAt };
 }
 
+/**
+ * Conteo de deals perdidos por `lostReasonId` (razón nativa de GHL). Base para
+ * que el tenant etiquete cada id en Settings (P2). Ignora los que no tienen id.
+ */
+export async function getLostReasonCounts(tenantId: string): Promise<Record<string, number>> {
+  const rows = await db
+    .select({ lostReasonId: deals.lostReasonId, count: sql<number>`count(*)::int` })
+    .from(deals)
+    .where(and(eq(deals.tenantId, tenantId), eq(deals.status, 'lost')))
+    .groupBy(deals.lostReasonId);
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    if (r.lostReasonId) out[r.lostReasonId] = r.count;
+  }
+  return out;
+}
+
 function parseDeal(payload: string): Deal | null {
   try {
     return JSON.parse(payload) as Deal;

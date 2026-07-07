@@ -12,14 +12,50 @@ type WonTrackData = {
   avgCycleDays: number;
   alerts: { type: string; message: string }[];
   error?: string;
-  successThresholds?: any;
-  businessFeatures?: any;
-  communicationPatterns?: any;
+  successThresholds?: {
+    fastCloseThreshold: number;
+    dangerResponseThreshold: number;
+    idealResponseThreshold: number;
+    avgMessagesPerDeal: number;
+    sampleSize: number;
+  };
+  businessFeatures?: {
+    topChannel: string;
+    channelWinRates: Record<string, number>;
+  };
+  communicationPatterns?: {
+    avgResponseMinutes: number;
+    medianResponseMinutes: number;
+    avgInboundRatio: number;
+  };
   playbookSummary?: string | null;
   playbookAnalyzedAt?: string | null;
   topWinFactors?: { factor: string; count: number }[];
+  factorLift?: FactorLift[];
+  segments?: SegmentThresholds[];
   llmError?: string | null;
   llmFallback?: boolean;
+};
+
+type FactorLift = {
+  factor: string;
+  label: string;
+  wonRate: number;
+  lostRate: number;
+  wonCount: number;
+  lostCount: number;
+  lift: number;
+};
+
+type SegmentThresholds = {
+  segment: string;
+  sampleSize: number;
+  thresholds: {
+    idealResponseThreshold: number;
+    dangerResponseThreshold: number;
+    medianTimeToClose: number;
+    avgContractValue: number;
+  };
 };
 
 function timeAgo(iso?: string | null): string {
@@ -271,8 +307,101 @@ export default function WonTrackPage() {
         </div>
       )}
 
-      {/* Factores de éxito más frecuentes */}
-      {data.topWinFactors && data.topWinFactors.length > 0 && (
+      {/* Qué SEPARA ganar de perder (lift won vs lost) — P2 */}
+      {data.factorLift && data.factorLift.length > 0 && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-6">
+          <h2 className="text-sm font-semibold text-zinc-700 mb-1">Qué separa ganar de perder</h2>
+          <p className="text-xs text-zinc-500 mb-4">
+            Lift = cuántas veces más frecuente es cada factor en tus deals ganados que en los
+            perdidos. Un lift &gt; 1 (verde) discrimina; ≈ 1 no explica nada.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-zinc-100 text-xs uppercase tracking-wider text-zinc-500">
+                  <th className="py-2 pr-4 font-semibold">Factor</th>
+                  <th className="py-2 px-3 font-semibold text-right">Ganados</th>
+                  <th className="py-2 px-3 font-semibold text-right">Perdidos</th>
+                  <th className="py-2 pl-3 font-semibold text-right">Lift</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-50">
+                {data.factorLift.map((f) => {
+                  const strong = f.lift >= 1.5;
+                  const weak = f.lift < 0.9;
+                  return (
+                    <tr key={f.factor}>
+                      <td className="py-2 pr-4 text-zinc-700">{f.label}</td>
+                      <td className="py-2 px-3 text-right font-mono text-zinc-600">
+                        {Math.round(f.wonRate * 100)}%
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono text-zinc-400">
+                        {Math.round(f.lostRate * 100)}%
+                      </td>
+                      <td
+                        className={`py-2 pl-3 text-right font-mono font-semibold ${
+                          strong ? 'text-green-600' : weak ? 'text-red-500' : 'text-zinc-500'
+                        }`}
+                      >
+                        {f.lift.toFixed(2)}×
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Benchmarks segmentados por tamaño de flota — P2 */}
+      {data.segments && data.segments.length > 0 && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-6">
+          <h2 className="text-sm font-semibold text-zinc-700 mb-1">Benchmarks por tamaño de flota</h2>
+          <p className="text-xs text-zinc-500 mb-4">
+            Umbrales calculados por segmento (un deal de $60K y uno de $41M no comparten ciclo).
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-zinc-100 text-xs uppercase tracking-wider text-zinc-500">
+                  <th className="py-2 pr-4 font-semibold">Segmento</th>
+                  <th className="py-2 px-3 font-semibold text-right">n</th>
+                  <th className="py-2 px-3 font-semibold text-right">Resp. ideal</th>
+                  <th className="py-2 px-3 font-semibold text-right">Resp. riesgo</th>
+                  <th className="py-2 px-3 font-semibold text-right">Cierre (mediana)</th>
+                  <th className="py-2 pl-3 font-semibold text-right">Ticket promedio</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-50">
+                {data.segments.map((s) => (
+                  <tr key={s.segment}>
+                    <td className="py-2 pr-4 text-zinc-700 capitalize">{s.segment}</td>
+                    <td className="py-2 px-3 text-right font-mono text-zinc-500">{s.sampleSize}</td>
+                    <td className="py-2 px-3 text-right font-mono text-green-600">
+                      &lt;{s.thresholds.idealResponseThreshold}m
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono text-amber-600">
+                      &gt;{s.thresholds.dangerResponseThreshold}m
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono text-zinc-600">
+                      {s.thresholds.medianTimeToClose}d
+                    </td>
+                    <td className="py-2 pl-3 text-right font-mono text-zinc-600">
+                      {formatCLP(s.thresholds.avgContractValue)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Factores de éxito más frecuentes (fallback si aún no hay lift/perdidos) */}
+      {(!data.factorLift || data.factorLift.length === 0) &&
+        data.topWinFactors &&
+        data.topWinFactors.length > 0 && (
         <div className="rounded-xl border border-zinc-200 bg-white p-6">
           <h2 className="text-sm font-semibold text-zinc-700 mb-4">
             Factores de éxito más frecuentes

@@ -19,6 +19,12 @@ import { resolveWorkingAIConfig } from '@/lib/ai-config';
 import { getLlmAnalysis, saveLlmAnalysis } from '@/lib/llm-store';
 import { saveTenantThresholds } from '@/lib/won-track-store';
 import { getSyncedDeals, getSyncStatus } from '@/lib/deal-sync';
+import {
+  computeFactorLift,
+  computeSegmentedThresholds,
+  type FactorLift,
+  type SegmentThresholds,
+} from '@/lib/comparative';
 
 /** Cuántos deals ganados muestreamos para extraer patrones de conversación (acota llamadas a GHL). */
 const SAMPLE_SIZE = 20;
@@ -211,6 +217,10 @@ export async function GET(request: Request) {
     let lostCount: number;
     let avgTicket: number;
     let syncedAt: string | null = null;
+    // P2 — inteligencia comparativa: qué separa ganar de perder + benchmarks por
+    // segmento. Solo se computa con sync (necesita el funnel completo won+lost).
+    let factorLift: FactorLift[] = [];
+    let segments: SegmentThresholds[] = [];
 
     if (usingSync) {
       const status = await getSyncStatus(orgId);
@@ -220,6 +230,19 @@ export async function GET(request: Request) {
       deals = synced.map(({ deal, messages }) => analyzeWonDeal(deal, messages, fieldMap));
       avgTicket = Math.round(
         synced.reduce((s, { deal }) => s + (deal.monetaryValue ?? 0), 0) / synced.length,
+      );
+
+      // Lift: mismos factores extraídos sobre los perdidos, para contrastar.
+      const syncedLost = await getSyncedDeals(orgId, 'lost');
+      const lostDeals = syncedLost.map(({ deal, messages }) =>
+        analyzeWonDeal(deal, messages, fieldMap),
+      );
+      factorLift = computeFactorLift(
+        deals.map((d) => d.factors),
+        lostDeals.map((d) => d.factors),
+      );
+      segments = computeSegmentedThresholds(
+        deals.map((d) => ({ features: d.features, patterns: d.patterns })),
       );
     } else {
       // Conteos para la tasa de conversión (baratos: solo metadatos).
@@ -310,6 +333,8 @@ export async function GET(request: Request) {
       ...buildResponse(output, wonCount, wonCount + lostCount, avgTicket, 'live'),
       dataSource: usingSync ? 'sync' : 'direct',
       syncedAt,
+      factorLift,
+      segments,
       llmError: llmError ?? null,
       llmFallback,
     });
