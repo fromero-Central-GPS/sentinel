@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { LOSS_REASONS } from '@/lib/taxonomy';
+
+type LostReasonRow = { id: string; name: string; reason?: string; count: number };
 
 type GhlSettings = {
   ghlApiToken: string | null;
@@ -43,6 +46,10 @@ export default function SettingsPage() {
   // AI: gestionada por la plataforma según el plan — el tenant solo la ve informativa.
   const [ai, setAi] = useState<AiSettings | null>(null);
   const [aiVerify, setAiVerify] = useState('');
+
+  // Razones de pérdida GHL (P2): etiquetas por lostReasonId detectado.
+  const [lostReasons, setLostReasons] = useState<LostReasonRow[]>([]);
+  const [lostReasonStatus, setLostReasonStatus] = useState('');
 
   // Subscription / usage state
   const [subscription, setSubscription] = useState<any>(null);
@@ -92,7 +99,37 @@ export default function SettingsPage() {
       .then((r) => r.json())
       .then((d) => setPlans(d.plans ?? []))
       .catch(() => {});
+
+    fetch('/api/settings/lost-reasons')
+      .then((r) => r.json())
+      .then((d: { detected?: LostReasonRow[] }) => {
+        // name === id significa "sin etiquetar" → input vacío.
+        setLostReasons(
+          (d.detected ?? []).map((r) => ({ ...r, name: r.name === r.id ? '' : r.name })),
+        );
+      })
+      .catch(() => {});
   }, []);
+
+  function updateLostReason(id: string, patch: Partial<LostReasonRow>) {
+    setLostReasons((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  async function saveLostReasons() {
+    setLostReasonStatus('Guardando…');
+    const map: Record<string, { name: string; reason?: string }> = {};
+    for (const r of lostReasons) {
+      const name = r.name.trim();
+      if (!name) continue;
+      map[r.id] = { name, reason: r.reason || undefined };
+    }
+    const res = await fetch('/api/settings/lost-reasons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ map }),
+    });
+    setLostReasonStatus(res.ok ? 'Guardado ✓' : 'Error al guardar');
+  }
 
   async function saveGhl() {
     setGhlStatus('Guardando…');
@@ -214,6 +251,59 @@ export default function SettingsPage() {
           </p>
         )}
       </section>
+
+      {/* Razones de pérdida (GHL) — P2 */}
+      {lostReasons.length > 0 && (
+        <section className="rounded-lg border p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Razones de pérdida (GHL)</h2>
+            <p className="text-sm text-gray-500">
+              GHL no expone el nombre de sus razones de pérdida por API. Nombra cada una y mapéala a
+              una categoría de Sentinel para medir el acuerdo con el diagnóstico de la IA en Forense.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {lostReasons.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center gap-2">
+                <span
+                  className="w-36 shrink-0 truncate font-mono text-xs text-gray-400"
+                  title={r.id}
+                >
+                  {r.id}
+                </span>
+                <span className="w-10 shrink-0 text-xs text-gray-500">{r.count}×</span>
+                <input
+                  value={r.name}
+                  onChange={(e) => updateLostReason(r.id, { name: e.target.value })}
+                  placeholder="Nombre legible"
+                  className="flex-1 min-w-40 rounded border px-2 py-1 text-sm"
+                />
+                <select
+                  value={r.reason ?? ''}
+                  onChange={(e) => updateLostReason(r.id, { reason: e.target.value })}
+                  className="rounded border px-2 py-1 text-sm"
+                >
+                  <option value="">— categoría —</option>
+                  {LOSS_REASONS.map((lr) => (
+                    <option key={lr} value={lr}>
+                      {lr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={saveLostReasons}
+              className="rounded bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+            >
+              Guardar
+            </button>
+            {lostReasonStatus && <span className="text-sm text-gray-600">{lostReasonStatus}</span>}
+          </div>
+        </section>
+      )}
 
       {/* Meta / WhatsApp Business Section */}
       <section className="rounded-lg border p-6 space-y-4">

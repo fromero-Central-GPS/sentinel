@@ -41,6 +41,10 @@ export const appSettings = pgTable('app_settings', {
   // Si son null, el motor cae a sus defaults (ver DEFAULT_FIELD_MAP).
   ghlFieldPlan: text('ghl_field_plan'),
   ghlFieldEquipos: text('ghl_field_equipos'),
+  // Mapa lostReasonId (GHL) → { name, reason? } serializado (JSON). GHL no expone
+  // los nombres de las razones de pérdida por API; el tenant las etiqueta a mano
+  // (P2). `reason` (código de taxonomía) habilita la calibración IA vs equipo.
+  ghlLostReasonMap: text('ghl_lost_reason_map'),
   // Config de IA por tenant (tier). Si son null → default de plataforma + OIDC.
   aiType: text('ai_type'), // proveedor/tier: deepseek | anthropic | openai | custom
   aiModel: text('ai_model'), // slug del AI Gateway, ej: deepseek/deepseek-v3.2

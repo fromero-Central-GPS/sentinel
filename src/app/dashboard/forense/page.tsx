@@ -20,6 +20,8 @@ type ForenseResponse = {
     llmFallback?: boolean;
     note?: string;
     source?: string;
+    teamLossReasons?: { id: string; name: string; reason?: string; count: number }[];
+    calibration?: { comparable: number; agree: number; agreement: number };
   };
   error?: string;
   detail?: string;
@@ -482,6 +484,53 @@ export default function ForensePage() {
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
           ⚠️ {error}
+        </div>
+      )}
+
+      {/* Razón registrada por el equipo (GHL) + calibración IA — P2 */}
+      {_meta.teamLossReasons && _meta.teamLossReasons.length > 0 && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-700">Razón registrada por el equipo</h2>
+              <p className="text-xs text-zinc-500">
+                Razón nativa de GHL (lostReasonId).{' '}
+                <a href="/settings" className="text-indigo-600 underline">
+                  Etiquétalas en Settings
+                </a>{' '}
+                para mapearlas y medir el acuerdo con la IA.
+              </p>
+            </div>
+            {_meta.calibration && _meta.calibration.comparable > 0 && (
+              <div className="text-right shrink-0">
+                <p className="text-2xl font-bold text-indigo-600">
+                  {Math.round(_meta.calibration.agreement * 100)}%
+                </p>
+                <p className="text-xs text-zinc-500">
+                  acuerdo IA ↔ equipo ({_meta.calibration.agree}/{_meta.calibration.comparable})
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {_meta.teamLossReasons.slice(0, 12).map((r) => {
+              const unlabeled = r.name === r.id;
+              return (
+                <span
+                  key={r.id}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${
+                    unlabeled
+                      ? 'bg-zinc-100 text-zinc-400 ring-1 ring-zinc-200'
+                      : 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200'
+                  }`}
+                  title={unlabeled ? 'Sin etiquetar — nómbrala en Settings' : r.reason}
+                >
+                  {unlabeled ? 'sin etiquetar' : r.name}
+                  <span className="font-mono opacity-70">{r.count}</span>
+                </span>
+              );
+            })}
+          </div>
         </div>
       )}
 

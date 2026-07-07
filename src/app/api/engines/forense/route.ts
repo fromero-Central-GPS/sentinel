@@ -34,6 +34,11 @@ import { resolveWorkingAIConfig, type TenantAIConfig } from '@/lib/ai-config';
 import type { LLMUsage } from '@/lib/llm';
 import { getSyncedDeals, getSyncStatus } from '@/lib/deal-sync';
 import { cleanMessageBody } from '@/lib/transcript';
+import {
+  parseLostReasonMap,
+  resolveTeamReasons,
+  computeCalibration,
+} from '@/lib/lost-reasons';
 
 /** Máximo de conversaciones que analiza el LLM por corrida on-demand (costo). */
 const LLM_BATCH_SIZE = 25;
@@ -424,6 +429,18 @@ export async function GET(request: Request) {
         }
       }
 
+      // P2 — razón registrada por el equipo (nombre legible) + calibración del
+      // LLM contra ella (% de acuerdo en deals con ambas señales disponibles).
+      const lostReasonMap = parseLostReasonMap(row.ghlLostReasonMap);
+      const teamLossReasons = resolveTeamReasons(ghlLossReasonCounts, lostReasonMap);
+      const calibration = computeCalibration(
+        sorted.map(({ deal }) => ({
+          lostReasonId: deal.lostReasonId,
+          aiReason: cached.get(deal.id)?.primaryReason ?? null,
+        })),
+        lostReasonMap,
+      );
+
       // El quota mensual mide análisis costosos (LLM); el regex local es gratis.
       await incrementUsage('forense', llmResults.size, llmUsage);
 
@@ -445,6 +462,8 @@ export async function GET(request: Request) {
           llmFallback,
           conversationCount: totalConversations,
           ghlLossReasonCounts,
+          teamLossReasons,
+          calibration,
           syncedAt: syncStatus.lastSyncedAt,
           locationId,
           note: `Funnel completo desde BD sincronizada (${totalConversations} oportunidades perdidas).`,
