@@ -84,6 +84,26 @@ function LiveOppIcon({ className }: { className?: string }) {
   );
 }
 
+function SplitFunnelIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+      <path d="M12 3v18" />
+    </svg>
+  );
+}
+
 function WonTrackIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -113,6 +133,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/forense', label: 'Forense', icon: ForenseIcon },
   { href: '/dashboard/live-opp', label: 'Live Opp', icon: LiveOppIcon },
   { href: '/dashboard/won-track', label: 'Won Track', icon: WonTrackIcon },
+  { href: '/dashboard/split-funnel', label: 'Split Funnel', icon: SplitFunnelIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
