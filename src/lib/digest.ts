@@ -41,8 +41,12 @@ function fmtClp(n: number): string {
 }
 
 function composeText(d: Omit<SellerDigest, 'text'>): string {
+  // El saludo y el cierre los aporta la plantilla de WhatsApp
+  // (`sentinel_digest_diario`): "Hola 👋 Tu resumen Sentinel de hoy: {{1}} …".
+  // Este texto es la variable {{1}}, así que arranca directo en el contenido
+  // para no duplicar el saludo.
   const lines: string[] = [
-    `Buenos días, ${d.sellerName}. Resumen Sentinel de hoy:`,
+    `${d.sellerName}, esto es lo que necesita tu atención hoy:`,
     `🔴 ${d.criticalCount} críticas · 🟠 ${d.highCount} en riesgo · $${fmtClp(d.totalValueAtRisk)} CLP en juego.`,
     '',
   ];
