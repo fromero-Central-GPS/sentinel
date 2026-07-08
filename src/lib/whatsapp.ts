@@ -60,6 +60,13 @@ export async function sendWhatsAppDigest(
   const lang = process.env.WHATSAPP_DIGEST_LANG ?? 'es';
   if (!template) return { sent: false, dryRun: true };
 
+  // Los parámetros de plantilla de WhatsApp NO admiten saltos de línea, tabs ni
+  // >4 espacios seguidos (Meta #132018). El digest se compone multilínea (para
+  // el preview/logs), así que colapsamos todo el espaciado a una sola línea
+  // antes de enviarlo como variable {{1}}. El saludo/estructura los aporta la
+  // plantilla misma.
+  const safeText = text.replace(/\s+/g, ' ').trim();
+
   const payload = {
     messaging_product: 'whatsapp',
     to: normalizePhone(to),
@@ -68,7 +75,7 @@ export async function sendWhatsAppDigest(
       name: template,
       language: { code: lang },
       components: [
-        { type: 'body', parameters: [{ type: 'text', text }] },
+        { type: 'body', parameters: [{ type: 'text', text: safeText }] },
       ],
     },
   };
