@@ -348,6 +348,36 @@ export async function fetchUsersDetailed({
   }));
 }
 
+/**
+ * Usuario individual por ID vía `GET /users/{userId}` — fuente autoritativa del
+ * nombre y teléfono del dueño de la oportunidad (`assignedTo`). El listado de la
+ * location (`/users/?locationId=`) suele devolver el `phone` vacío, así que para
+ * el digest resolvemos cada vendedor asignado por su ID. Devuelve null si el
+ * usuario no existe / no es accesible con el token del tenant.
+ */
+export async function fetchUserById(
+  { token }: GhlCredentials,
+  userId: string,
+): Promise<GhlUser | null> {
+  const res = await ghlFetch(`/users/${userId}`, token);
+  if (!res.ok) return null;
+  const u = (await res.json().catch(() => null)) as {
+    id?: string;
+    name?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+  } | null;
+  if (!u?.id) return null;
+  return {
+    id: u.id,
+    name: u.name || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || u.id,
+    email: u.email,
+    phone: u.phone?.trim() || undefined,
+  };
+}
+
 // ─── Acciones de escritura (P1-3: 1-click Forense → GHL) ──────────────────
 
 /** Agrega tags a un contacto (p.ej. la ola de reactivación). */
