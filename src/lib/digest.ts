@@ -8,7 +8,7 @@
  */
 
 import type { GhlCredentials } from '@/lib/ghl-client';
-import { fetchUsersDetailed, type GhlUser } from '@/lib/ghl-client';
+import { fetchUserById, mapWithConcurrency, type GhlUser } from '@/lib/ghl-client';
 import { getSyncedDeals } from '@/lib/deal-sync';
 import { getTenantThresholds } from '@/lib/won-track-store';
 import { analyzeLiveOpportunity, getDefaultThresholds } from '@/lib/live-opp-engine';
@@ -66,17 +66,16 @@ export async function buildTenantDigests(
   tenantId: string,
   creds: GhlCredentials,
 ): Promise<SellerDigest[]> {
-  const [synced, thresholdsRaw, users] = await Promise.all([
+  const [synced, thresholdsRaw] = await Promise.all([
     getSyncedDeals(tenantId, 'open'),
     getTenantThresholds(tenantId),
-    fetchUsersDetailed(creds),
   ]);
   if (synced.length === 0) return [];
 
   const thresholds = thresholdsRaw ?? getDefaultThresholds();
-  const userById = new Map<string, GhlUser>(users.map((u) => [u.id, u]));
 
-  // Agrupa las oportunidades en riesgo por vendedor asignado.
+  // Agrupa las oportunidades en riesgo por vendedor asignado (dueño de la
+  // oportunidad, `deal.assignedTo`).
   const bySeller = new Map<string, DigestOpp[]>();
   for (const { deal, messages } of synced) {
     if (!deal.assignedTo) continue;
@@ -92,6 +91,18 @@ export async function buildTenantDigests(
     });
     bySeller.set(deal.assignedTo, list);
   }
+  if (bySeller.size === 0) return [];
+
+  // Resuelve nombre + teléfono de cada vendedor asignado por su ID
+  // (`GET /users/{id}`): el listado de la location devuelve el `phone` vacío, y
+  // así solo consultamos los usuarios que realmente tienen oportunidades en
+  // riesgo.
+  const sellerIds = [...bySeller.keys()];
+  const fetched = await mapWithConcurrency(sellerIds, 4, (id) => fetchUserById(creds, id));
+  const userById = new Map<string, GhlUser>();
+  fetched.forEach((u, i) => {
+    if (u) userById.set(sellerIds[i], u);
+  });
 
   const digests: SellerDigest[] = [];
   for (const [sellerId, opps] of bySeller) {
