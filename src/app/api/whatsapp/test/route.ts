@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   let source: string;
   const tenant = (await listGhlTenants()).find((t) => t.tenantId === orgId);
   if (tenant) {
-    const digests = await buildTenantDigests(orgId, tenant.creds);
+    const digests = await buildTenantDigests(orgId, tenant.creds, tenant.salesPipelineId);
     const chosen = sellerId ? digests.find((d) => d.sellerId === sellerId) : digests[0];
     if (chosen) {
       text = chosen.text;

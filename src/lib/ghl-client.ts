@@ -302,6 +302,24 @@ export async function fetchStageMap({
 }
 
 /**
+ * Lista los pipelines de la location (`id` + `name`), para que el tenant elija
+ * cuál es su pipeline de ventas en Settings. Devuelve [] ante error controlado.
+ */
+export async function fetchPipelines({
+  token,
+  locationId,
+}: GhlCredentials): Promise<Array<{ id: string; name: string }>> {
+  const res = await ghlFetch(`/opportunities/pipelines?locationId=${locationId}`, token);
+  if (!res.ok) return [];
+  const data = (await res.json().catch(() => null)) as {
+    pipelines?: Array<{ id?: string; name?: string }>;
+  } | null;
+  return (data?.pipelines ?? [])
+    .filter((p): p is { id: string; name: string } => Boolean(p.id))
+    .map((p) => ({ id: p.id, name: p.name ?? p.id }));
+}
+
+/**
  * Mapa `userId → nombre` de los usuarios de la location, para resolver el dueño
  * (assignedTo) de cada oportunidad. Un único llamado por request.
  */

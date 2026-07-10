@@ -5,9 +5,13 @@ import { LOSS_REASONS } from '@/lib/taxonomy';
 
 type LostReasonRow = { id: string; name: string; reason?: string; count: number };
 
+type GhlPipeline = { id: string; name: string };
+
 type GhlSettings = {
   ghlApiToken: string | null;
   ghlLocationId: string | null;
+  ghlSalesPipelineId: string | null;
+  pipelines: GhlPipeline[];
 };
 
 type MetaSettings = {
@@ -24,7 +28,12 @@ type AiSettings = {
 };
 
 export default function SettingsPage() {
-  const [ghl, setGhl] = useState<GhlSettings>({ ghlApiToken: null, ghlLocationId: null });
+  const [ghl, setGhl] = useState<GhlSettings>({
+    ghlApiToken: null,
+    ghlLocationId: null,
+    ghlSalesPipelineId: null,
+    pipelines: [],
+  });
   const [meta, setMeta] = useState<MetaSettings>({
     metaWabaId: null,
     metaPhoneNumberId: null,
@@ -34,6 +43,7 @@ export default function SettingsPage() {
 
   const [ghlToken, setGhlToken] = useState('');
   const [ghlLocationId, setGhlLocationId] = useState('');
+  const [ghlSalesPipelineId, setGhlSalesPipelineId] = useState('');
   const [metaWabaId, setMetaWabaId] = useState('');
   const [metaPhoneNumberId, setMetaPhoneNumberId] = useState('');
   const [metaAccessToken, setMetaAccessToken] = useState('');
@@ -66,6 +76,7 @@ export default function SettingsPage() {
         setGhl(data);
         setGhlToken(data.ghlApiToken ?? '');
         setGhlLocationId(data.ghlLocationId ?? '');
+        setGhlSalesPipelineId(data.ghlSalesPipelineId ?? '');
       });
 
     fetch('/api/settings/meta')
@@ -136,17 +147,18 @@ export default function SettingsPage() {
     const res = await fetch('/api/settings/ghl', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ghlApiToken: ghlToken, ghlLocationId }),
+      body: JSON.stringify({ ghlApiToken: ghlToken, ghlLocationId, ghlSalesPipelineId }),
     });
     if (!res.ok) {
       setGhlStatus('Error al guardar');
       return;
     }
-    // Reload to get masked token
+    // Reload to get masked token + pipeline list
     const updated: GhlSettings = await fetch('/api/settings/ghl').then((r) => r.json());
     setGhl(updated);
     setGhlToken(updated.ghlApiToken ?? '');
     setGhlLocationId(updated.ghlLocationId ?? '');
+    setGhlSalesPipelineId(updated.ghlSalesPipelineId ?? '');
     setGhlStatus('Guardado ✓');
   }
 
@@ -228,6 +240,27 @@ export default function SettingsPage() {
             placeholder="Ej: abc123xyz"
             className="w-full rounded border px-3 py-2 text-sm font-mono"
           />
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium">Pipeline de ventas</label>
+          <select
+            value={ghlSalesPipelineId}
+            onChange={(e) => setGhlSalesPipelineId(e.target.value)}
+            className="w-full rounded border px-3 py-2 text-sm"
+          >
+            <option value="">Todas las oportunidades (sin filtro)</option>
+            {ghl.pipelines.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500">
+            El digest diario solo considera las oportunidades de este pipeline. Los pipelines
+            post-venta (On Boarding, Up Sell…) representan negocios ya ganados y quedan fuera. Guarda
+            el token primero para poder elegir.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">

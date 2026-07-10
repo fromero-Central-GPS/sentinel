@@ -41,6 +41,11 @@ export const appSettings = pgTable('app_settings', {
   // Si son null, el motor cae a sus defaults (ver DEFAULT_FIELD_MAP).
   ghlFieldPlan: text('ghl_field_plan'),
   ghlFieldEquipos: text('ghl_field_equipos'),
+  // Pipeline de ventas del tenant (GHL). Los motores/digest solo consideran las
+  // oportunidades de este pipeline; el resto (On Boarding, Up Sell, etc.) son
+  // post-venta y no deben tratarse como negocios abiertos en riesgo. Si es null
+  // → sin filtro (se consideran todas, comportamiento histórico).
+  ghlSalesPipelineId: text('ghl_sales_pipeline_id'),
   // Mapa lostReasonId (GHL) → { name, reason? } serializado (JSON). GHL no expone
   // los nombres de las razones de pérdida por API; el tenant las etiqueta a mano
   // (P2). `reason` (código de taxonomía) habilita la calibración IA vs equipo.
