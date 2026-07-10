@@ -47,6 +47,8 @@ export interface GhlTenant {
   tenantId: string;
   creds: GhlCredentials;
   fieldMap: CustomFieldMap;
+  /** Pipeline de ventas del tenant (GHL). null → sin filtro (todas las opps). */
+  salesPipelineId: string | null;
 }
 
 /**
@@ -67,6 +69,7 @@ export async function listGhlTenants(): Promise<GhlTenant[]> {
         tenantId: row.tenantId,
         creds: { token: decrypt(row.ghlApiToken), locationId: row.ghlLocationId },
         fieldMap: { plan: row.ghlFieldPlan ?? undefined, equipos: row.ghlFieldEquipos ?? undefined },
+        salesPipelineId: row.ghlSalesPipelineId ?? null,
       });
     } catch {
       // Token no desencriptable (key rotada / dato corrupto): sáltalo, no

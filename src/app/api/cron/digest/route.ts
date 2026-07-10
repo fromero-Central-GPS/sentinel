@@ -18,8 +18,8 @@ export async function GET(request: Request) {
   const started = Date.now();
   const tenants = await listGhlTenants();
   const results = [];
-  for (const { tenantId, creds } of tenants) {
-    results.push(await runDigestForTenant(tenantId, creds));
+  for (const { tenantId, creds, salesPipelineId } of tenants) {
+    results.push(await runDigestForTenant(tenantId, creds, salesPipelineId));
   }
 
   const sent = results.reduce((s, r) => s + r.sent, 0);
