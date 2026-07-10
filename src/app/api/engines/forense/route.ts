@@ -475,7 +475,11 @@ export async function GET(request: Request) {
     }
 
     try {
-      const rawOpps = await fetchOpportunities(creds, 'lost', 20);
+      const rawOppsAll = await fetchOpportunities(creds, 'lost', 20);
+      // Solo el pipeline de ventas configurado (los post-venta ya están ganados).
+      const rawOpps = row.ghlSalesPipelineId
+        ? rawOppsAll.filter((o) => o.pipelineId === row.ghlSalesPipelineId)
+        : rawOppsAll;
 
       if (rawOpps.length === 0) {
         return NextResponse.json({

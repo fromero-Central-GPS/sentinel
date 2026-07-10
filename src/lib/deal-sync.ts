@@ -13,7 +13,7 @@
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { deals, dealMessages } from '@/db/schema';
+import { deals, dealMessages, appSettings } from '@/db/schema';
 import {
   fetchOpportunitiesPage,
   fetchConversationIdByContact,
@@ -229,11 +229,24 @@ function parseMessages(payload: string | undefined | null): CanonicalMessage[] {
 /**
  * Deals sincronizados de un status con sus mensajes, listos para los motores.
  * Devuelve [] si el tenant nunca sincronizó (los llamadores caen al modo legacy).
+ *
+ * Aplica aquí — única fuente de verdad para TODOS los motores (digest, Live Opp,
+ * Forense, Won Track, Split the Funnel) — el filtro por el pipeline de ventas
+ * configurado del tenant (`app_settings.ghl_sales_pipeline_id`). Los pipelines
+ * post-venta (On Boarding, Up Sell…) contienen negocios ya ganados y con
+ * `assignedTo` = dueño del contacto, así que no deben entrar a ningún análisis.
+ * Si el tenant no configuró pipeline → sin filtro (comportamiento histórico).
  */
 export async function getSyncedDeals(
   tenantId: string,
   status: OpportunityStatus,
 ): Promise<SyncedDeal[]> {
+  const [settings] = await db
+    .select({ salesPipelineId: appSettings.ghlSalesPipelineId })
+    .from(appSettings)
+    .where(eq(appSettings.tenantId, tenantId));
+  const salesPipelineId = settings?.salesPipelineId ?? null;
+
   const dealRows = await db
     .select({ payload: deals.payload, ghlId: deals.ghlId })
     .from(deals)
@@ -250,6 +263,7 @@ export async function getSyncedDeals(
   for (const row of dealRows) {
     const deal = parseDeal(row.payload);
     if (!deal) continue;
+    if (salesPipelineId && deal.pipelineId !== salesPipelineId) continue;
     out.push({ deal, messages: parseMessages(msgByDeal.get(row.ghlId)) });
   }
   return out;

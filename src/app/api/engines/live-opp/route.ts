@@ -169,6 +169,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `GHL error: ${String(err)}` }, { status: 502 });
   }
 
+  // Restringe al pipeline de ventas configurado del tenant: los pipelines
+  // post-venta (On Boarding, Up Sell…) son negocios ya ganados, no
+  // oportunidades abiertas. Sin pipeline configurado → sin filtro.
+  if (row.ghlSalesPipelineId) {
+    rawOpps = rawOpps.filter((o) => o.pipelineId === row.ghlSalesPipelineId);
+  }
+
   // Check conversation limit before processing
   const limitCheck = await enforceConversationLimit(rawOpps.length);
   if (limitCheck.blocked) return limitCheck.response!;

@@ -65,8 +65,9 @@ function composeText(d: Omit<SellerDigest, 'text'>): string {
 export async function buildTenantDigests(
   tenantId: string,
   creds: GhlCredentials,
-  salesPipelineId?: string | null,
 ): Promise<SellerDigest[]> {
+  // `getSyncedDeals` ya restringe al pipeline de ventas configurado del tenant
+  // (los pipelines post-venta quedan fuera), así que aquí solo agrupamos.
   const [synced, thresholdsRaw] = await Promise.all([
     getSyncedDeals(tenantId, 'open'),
     getTenantThresholds(tenantId),
@@ -79,12 +80,6 @@ export async function buildTenantDigests(
   // oportunidad, `deal.assignedTo`).
   const bySeller = new Map<string, DigestOpp[]>();
   for (const { deal, messages } of synced) {
-    // Solo el pipeline de ventas configurado (si lo hay): las oportunidades de
-    // pipelines post-venta (On Boarding, Up Sell…) ya están ganadas y NO deben
-    // aparecer como negocios abiertos en riesgo. Su `assignedTo` además suele
-    // ser el dueño del contacto, no del vendedor, así que filtrarlas evita
-    // también avisar a la persona equivocada.
-    if (salesPipelineId && deal.pipelineId !== salesPipelineId) continue;
     if (!deal.assignedTo) continue;
     const a = analyzeLiveOpportunity(deal, messages, thresholds);
     if (a.riskLevel !== 'critical' && a.riskLevel !== 'high') continue;
@@ -151,10 +146,9 @@ export interface DigestRunResult {
 export async function runDigestForTenant(
   tenantId: string,
   creds: GhlCredentials,
-  salesPipelineId?: string | null,
 ): Promise<DigestRunResult> {
   try {
-    const digests = await buildTenantDigests(tenantId, creds, salesPipelineId);
+    const digests = await buildTenantDigests(tenantId, creds);
     if (digests.length === 0) {
       return { tenantId, sellers: 0, sent: 0, dryRun: 0, skippedNoPhone: 0, errors: [] };
     }

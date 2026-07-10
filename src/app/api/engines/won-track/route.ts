@@ -246,10 +246,16 @@ export async function GET(request: Request) {
       );
     } else {
       // Conteos para la tasa de conversión (baratos: solo metadatos).
-      const [wonRaw, lostRaw] = await Promise.all([
+      const [wonRawAll, lostRawAll] = await Promise.all([
         fetchOpportunities(creds, 'won', 100),
         fetchOpportunities(creds, 'lost', 100),
       ]);
+
+      // Solo el pipeline de ventas configurado (los post-venta ya están ganados).
+      const inSalesPipeline = (o: { pipelineId?: string }) =>
+        !row.ghlSalesPipelineId || o.pipelineId === row.ghlSalesPipelineId;
+      const wonRaw = wonRawAll.filter(inSalesPipeline);
+      const lostRaw = lostRawAll.filter(inSalesPipeline);
 
       if (wonRaw.length === 0) {
         const empty = generateWonTrackOutput([], [], []);
