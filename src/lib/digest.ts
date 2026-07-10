@@ -67,6 +67,8 @@ export async function buildTenantDigests(
   creds: GhlCredentials,
   salesPipelineId?: string | null,
 ): Promise<SellerDigest[]> {
+  // `getSyncedDeals` ya restringe al pipeline de ventas configurado del tenant
+  // (los pipelines post-venta quedan fuera), así que aquí solo agrupamos.
   const [synced, thresholdsRaw] = await Promise.all([
     getSyncedDeals(tenantId, 'open'),
     getTenantThresholds(tenantId),
