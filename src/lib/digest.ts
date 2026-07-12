@@ -12,6 +12,8 @@ import { fetchUserById, mapWithConcurrency, type GhlUser } from '@/lib/ghl-clien
 import { getSyncedDeals } from '@/lib/deal-sync';
 import { getTenantThresholds } from '@/lib/won-track-store';
 import { analyzeLiveOpportunity, getDefaultThresholds } from '@/lib/live-opp-engine';
+import { decidePlaybookAction, ACTION_LABELS } from '@/lib/playbook-engine';
+import type { AgentAction } from '@/lib/taxonomy';
 import { getMetaCreds, sendWhatsAppDigest, type SendResult } from '@/lib/whatsapp';
 
 /** Cuántas oportunidades como máximo se listan por vendedor en el mensaje. */
@@ -22,6 +24,8 @@ export interface DigestOpp {
   value: number;
   riskLevel: string;
   riskScore: number;
+  /** Acción tipificada del playbook (AG-1). */
+  action: AgentAction;
   topAction: string;
 }
 
@@ -90,13 +94,21 @@ export async function buildTenantDigests(
     if (!deal.assignedTo) continue;
     const a = analyzeLiveOpportunity(deal, messages, thresholds);
     if (a.riskLevel !== 'critical' && a.riskLevel !== 'high') continue;
+    // Playbook (AG-1): decide UNA acción tipificada por deal. Los deals en
+    // gestión activa o pausados no le suman ruido al digest del vendedor.
+    const decision = decidePlaybookAction(deal, messages, a);
+    if (decision.action === 'no_tocar') continue;
     const list = bySeller.get(deal.assignedTo) ?? [];
     list.push({
       name: a.contactName || deal.name || a.opportunityId,
       value: a.value,
       riskLevel: a.riskLevel,
       riskScore: a.overallRiskScore,
-      topAction: a.recommendedActions[0] ?? 'Revisar la oportunidad.',
+      action: decision.action,
+      topAction:
+        decision.action === 'monitorear'
+          ? (a.recommendedActions[0] ?? 'Revisar la oportunidad.')
+          : `${ACTION_LABELS[decision.action]}: ${decision.rationale}`,
     });
     bySeller.set(deal.assignedTo, list);
   }

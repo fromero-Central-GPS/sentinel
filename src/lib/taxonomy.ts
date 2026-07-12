@@ -104,6 +104,27 @@ export const WIN_FACTORS = [
 ] as const;
 export type WinFactor = (typeof WIN_FACTORS)[number];
 
+// ─── Acciones del agente (Playbook — AG-1) ────────────────────────────────────
+
+/**
+ * Catálogo cerrado de acciones que el playbook puede recomendar (AG-1) y que el
+ * agente podrá ejecutar en fases posteriores (AG-2+). Cada acción lleva su nivel
+ * de riesgo implícito: `contactar_cliente`/`ultimo_intento` tocan al cliente
+ * (las últimas en ganar autonomía); el resto solo toca el CRM o al vendedor.
+ * Ver docs/agente-vendedor-arquitectura.md §4.
+ */
+export const AGENT_ACTIONS = [
+  'contactar_cliente', // mensaje saliente al cliente (WhatsApp/email)
+  'ultimo_intento', // último mensaje + cambio de canal
+  'mover_a_frio', // mover etapa + nota con motivo
+  'crear_tarea_vendedor', // tarea en GHL asignada al ejecutivo
+  'crear_nota', // registrar hallazgo/acción en la oportunidad
+  'escalar_a_humano', // requiere al vendedor ahora (cliente esperando, deal caliente)
+  'no_tocar', // en gestión humana / pausado
+  'monitorear', // sin acción; re-evaluar en el próximo ciclo
+] as const;
+export type AgentAction = (typeof AGENT_ACTIONS)[number];
+
 // ─── Clase de intención de entrada (Split the Funnel) ─────────────────────────
 
 /**
