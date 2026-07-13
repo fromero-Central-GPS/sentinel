@@ -151,6 +151,12 @@ export interface PlaybookThresholds {
   /** Intentos sin respuesta que gatillan último intento y Frío en consulta inicial. */
   lastAttemptFrom: number;
   moveToColdFrom: number;
+  /**
+   * Horas máximas de "cliente esperando" para escalar al vendedor. Más viejo
+   * que esto ya no es una urgencia de respuesta: es un lead abandonado y lo
+   * manejan las rondas (seguimiento/Frío). Evita inundar de escalamientos.
+   */
+  escalateResponseMaxHours: number;
 }
 
 export function getDefaultPlaybookThresholds(): PlaybookThresholds {
@@ -161,6 +167,7 @@ export function getDefaultPlaybookThresholds(): PlaybookThresholds {
     demoRetentionDays: 14,
     lastAttemptFrom: 3,
     moveToColdFrom: 6,
+    escalateResponseMaxHours: 7 * 24,
   };
 }
 
@@ -189,15 +196,18 @@ export function decidePlaybookAction(
     return { ...base, action: 'no_tocar', rationale: 'Pausado por el equipo (ai-pausado).' };
   }
 
-  // Cliente esperando respuesta: eso es del vendedor (o de un playbook de
-  // respuesta), nunca del agente de seguimiento.
+  // Cliente esperando respuesta RECIENTE: eso es del vendedor (o de un
+  // playbook de respuesta), nunca del agente de seguimiento. Si la espera
+  // supera el tope, ya no es urgencia: es un lead abandonado y decide la ronda.
   if (analysis.alerts.some((a) => a.category === 'no_response')) {
     const h = analysis.hoursSinceLastInbound;
-    return {
-      ...base,
-      action: 'escalar_a_humano',
-      rationale: `Cliente esperando respuesta${h != null ? ` hace ${formatHours(h)}` : ''} — responder antes de cualquier seguimiento.`,
-    };
+    if (h == null || h <= thresholds.escalateResponseMaxHours) {
+      return {
+        ...base,
+        action: 'escalar_a_humano',
+        rationale: `Cliente esperando respuesta${h != null ? ` hace ${formatHours(h)}` : ''} — responder antes de cualquier seguimiento.`,
+      };
+    }
   }
 
   // Etapas de cierre son territorio humano: solo empujar si se estancan.
