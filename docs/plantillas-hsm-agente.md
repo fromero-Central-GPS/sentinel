@@ -122,6 +122,22 @@ Botones: `Sí, muéstrame` · `Tengo dudas` · `Todo bien`
    (+56 9 7511 1485) verificando entrega y renderizado de variables.
 3. Registrar el nombre exacto aprobado aquí (si Meta fuerza cambios).
 
+### Estado (2026-07-13): APROBADAS y PROBADAS ✓
+
+Las 6 plantillas quedaron aprobadas con estos mismos nombres e idioma `es`.
+**Meta las recategorizó a Marketing** (no aceptó Utility para textos de
+seguimiento comercial); funcionan igual, con dos consecuencias operativas:
+
+- Aplican los **caps de frecuencia marketing por usuario** de Meta y el
+  experimento del ~1% (error 130472) — un envío puede no entregarse sin que
+  sea culpa nuestra. El agente debe tratar `failed` con 130472/131049 como
+  "canal no disponible" (cambiar canal / crear tarea), no como error.
+- Precio por mensaje de categoría marketing.
+
+Test por API (2026-07-13, al número de prueba, vía PIT de Valeria): las 6
+enviadas y aceptadas — `delivered`/`read` sin errores de nombre (#132001),
+idioma ni frecuencia. La variable {{1}} renderizó el nombre correctamente.
+
 ## Interpretación de los botones (para el playbook)
 
 La respuesta por botón es señal estructurada gratis:
