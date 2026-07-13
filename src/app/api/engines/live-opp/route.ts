@@ -1,8 +1,8 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { appSettings } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { appSettings, agentActions } from '@/db/schema';
+import { and, desc, eq } from 'drizzle-orm';
 import { decrypt } from '@/lib/encryption';
 import {
   enforceMotorAccess,
@@ -42,6 +42,47 @@ function playbookForUi(deal: Deal, messages: CanonicalMessage[], analysis: LiveO
     executable: EXECUTABLE_ACTIONS.includes(d.action),
     contactId: deal.contactId,
     pipelineId: deal.pipelineId,
+    attempts: d.attempts,
+    daysInStage: d.daysInStage,
+  };
+}
+
+/**
+ * Resumen del estado del lead para la fila expandida: quién habló último y
+ * hace cuánto, volumen de conversación, intentos, señales y la última acción
+ * ejecutada por el agente (de `agent_actions`).
+ */
+function resumenForUi(
+  deal: Deal,
+  messages: CanonicalMessage[],
+  analysis: LiveOppAnalysis,
+  playbook: ReturnType<typeof playbookForUi>,
+  lastAgentAction: { label: string; when: string } | null,
+) {
+  const real = messages
+    .filter((m) => !m.messageType.startsWith('TYPE_ACTIVITY') && (m.body?.trim().length ?? 0) > 0)
+    .sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime());
+  const last = real[0];
+  return {
+    contacto: {
+      name: deal.contact.name,
+      email: deal.contact.email ?? null,
+      phone: deal.contact.phone ?? null,
+      company: deal.contact.companyName ?? null,
+    },
+    lastMessage: last
+      ? {
+          who: last.direction === 'inbound' ? ('cliente' as const) : ('equipo' as const),
+          when: last.dateAdded,
+          snippet: last.body.length > 120 ? `${last.body.slice(0, 120)}…` : last.body,
+        }
+      : null,
+    totalMessages: analysis.totalMessages,
+    messagesInLast7Days: analysis.messagesInLast7Days,
+    attempts: playbook.attempts,
+    daysInStage: playbook.daysInStage,
+    intentSignals: analysis.intentSignals.slice(0, 4),
+    lastAgentAction,
   };
 }
 
@@ -61,6 +102,7 @@ export async function GET(request: Request) {
       owner: string | null;
       createdAt: string;
       playbook: ReturnType<typeof playbookForUi>;
+      resumen: ReturnType<typeof resumenForUi>;
     }> = [];
 
     const mockOpps: OpenOpportunity[] = [
@@ -131,19 +173,21 @@ export async function GET(request: Request) {
       ];
       const analysis = analyzeLiveOpportunity(opp, messages, thresholds);
       if (analysis.riskLevel !== 'none') {
+        const playbook = playbookForUi(opp, messages, analysis);
         analyzedOpps.push({
           analysis,
           opportunityName: mockDeal[opp.id] ?? opp.name,
           comentarios: mockComentarios[opp.id] ?? '',
           owner: opp.assignedTo ? (mockOwners[opp.assignedTo] ?? null) : null,
           createdAt: opp.createdAt,
-          playbook: playbookForUi(opp, messages, analysis),
+          playbook,
+          resumen: resumenForUi(opp, messages, analysis, playbook, null),
         });
       }
     }
 
     const mappedOpps = analyzedOpps
-      .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook }) => ({
+      .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook, resumen }) => ({
         id: a.opportunityId,
         name: a.contactName || a.opportunityId,
         opportunityName,
@@ -159,6 +203,7 @@ export async function GET(request: Request) {
         riskLevel: a.riskLevel,
         recommendedActions: a.recommendedActions.slice(0, 3),
         playbook,
+        resumen,
       }))
       .sort((a, b) => b.riskScore - a.riskScore);
 
@@ -234,6 +279,27 @@ export async function GET(request: Request) {
       : Promise.resolve([]),
   );
 
+  // Última acción ejecutada por el agente por deal (bitácora AG-2), para el
+  // resumen "qué se ha hecho". Una consulta por request.
+  const executedRows = await db
+    .select({
+      dealGhlId: agentActions.dealGhlId,
+      action: agentActions.action,
+      executedAt: agentActions.executedAt,
+    })
+    .from(agentActions)
+    .where(and(eq(agentActions.tenantId, orgId), eq(agentActions.status, 'executed')))
+    .orderBy(desc(agentActions.executedAt));
+  const lastActionByDeal = new Map<string, { label: string; when: string }>();
+  for (const r of executedRows) {
+    if (!lastActionByDeal.has(r.dealGhlId) && r.executedAt) {
+      lastActionByDeal.set(r.dealGhlId, {
+        label: ACTION_LABELS[r.action as keyof typeof ACTION_LABELS] ?? r.action,
+        when: r.executedAt.toISOString(),
+      });
+    }
+  }
+
   const analyzedOpps: Array<{
     analysis: ReturnType<typeof analyzeLiveOpportunity>;
     opportunityName: string;
@@ -241,6 +307,7 @@ export async function GET(request: Request) {
     owner: string | null;
     createdAt: string;
     playbook: ReturnType<typeof playbookForUi>;
+    resumen: ReturnType<typeof resumenForUi>;
   }> = [];
 
   deals.forEach(({ opp, deal }, i) => {
@@ -251,6 +318,7 @@ export async function GET(request: Request) {
         opp.customFields
           ?.find((f) => f.id === DEFAULT_FIELD_MAP.comentarios)
           ?.fieldValueString?.trim() || '';
+      const playbook = playbookForUi(deal, messagesByOpp[i], analysis);
       analyzedOpps.push({
         analysis,
         // Nombre del deal (ej "Plan Lite Anual x2 | TRANSMACO"), aparte del contacto.
@@ -258,13 +326,20 @@ export async function GET(request: Request) {
         comentarios,
         owner: deal.assignedTo ? (userMap[deal.assignedTo] ?? null) : null,
         createdAt: deal.createdAt,
-        playbook: playbookForUi(deal, messagesByOpp[i], analysis),
+        playbook,
+        resumen: resumenForUi(
+          deal,
+          messagesByOpp[i],
+          analysis,
+          playbook,
+          lastActionByDeal.get(deal.id) ?? null,
+        ),
       });
     }
   });
 
   const mappedOpps = analyzedOpps
-    .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook }) => ({
+    .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook, resumen }) => ({
       id: a.opportunityId,
       name: a.contactName || a.opportunityId,
       opportunityName,
@@ -281,6 +356,7 @@ export async function GET(request: Request) {
       riskLevel: a.riskLevel,
       recommendedActions: a.recommendedActions.slice(0, 3),
       playbook,
+      resumen,
     }))
     .sort((a, b) => b.riskScore - a.riskScore);
 

@@ -13,6 +13,7 @@
 import type { SuccessThresholds } from './won-track-engine';
 import type { CanonicalMessage, Deal } from './types';
 import type { RiskSeverity, RiskSignal } from './taxonomy';
+import { formatHours } from './playbook-engine';
 
 export type { RiskSeverity };
 
@@ -241,7 +242,7 @@ export function analyzeLiveOpportunity(
           category: 'no_response',
           severity: sev,
           title: 'Cliente esperando respuesta',
-          detail: `Último mensaje inbound hace ${Math.round(hoursSinceLastInbound)}h sin respuesta`,
+          detail: `Último mensaje inbound hace ${formatHours(hoursSinceLastInbound)} sin respuesta`,
           metric: 'hours_since_last_inbound',
           currentValue: Math.round(hoursSinceLastInbound),
           threshold: 1,
