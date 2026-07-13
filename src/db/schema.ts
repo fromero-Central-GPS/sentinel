@@ -54,6 +54,11 @@ export const appSettings = pgTable('app_settings', {
   aiType: text('ai_type'), // proveedor/tier: deepseek | anthropic | openai | custom
   aiModel: text('ai_model'), // slug del AI Gateway, ej: deepseek/deepseek-v3.2
   aiApiKey: text('ai_api_key'), // AI Gateway API key (BYOK), AES-256-GCM encrypted
+  // Matriz de autonomía del agente (AG-3): JSON AgentAction → off|propose|auto.
+  // null → default (todo 'propose': el cron propone, nada se ejecuta solo).
+  agentAutonomy: text('agent_autonomy'),
+  // Usuario GHL del agente (Valeria) — para firmar/detectar autoría y ownership.
+  ghlAgentUserId: text('ghl_agent_user_id'),
   // Meta / WhatsApp Business credentials (AES-256-GCM encrypted)
   metaWabaId: text('meta_waba_id'),
   metaPhoneNumberId: text('meta_phone_number_id'),

@@ -61,6 +61,14 @@ export default function SettingsPage() {
   const [lostReasons, setLostReasons] = useState<LostReasonRow[]>([]);
   const [lostReasonStatus, setLostReasonStatus] = useState('');
 
+  // Agente (AG-3): matriz de autonomía por acción + usuario GHL del agente.
+  const [agentAutonomy, setAgentAutonomy] = useState<Record<string, string>>({});
+  const [agentConfigurable, setAgentConfigurable] = useState<
+    Array<{ action: string; label: string }>
+  >([]);
+  const [agentUserId, setAgentUserId] = useState('');
+  const [agentStatus, setAgentStatus] = useState('');
+
   // Subscription / usage state
   const [subscription, setSubscription] = useState<any>(null);
   const [usage, setUsage] = useState<any>(null);
@@ -120,7 +128,32 @@ export default function SettingsPage() {
         );
       })
       .catch(() => {});
+
+    fetch('/api/settings/agent')
+      .then((r) => r.json())
+      .then(
+        (d: {
+          autonomy?: Record<string, string>;
+          agentUserId?: string | null;
+          configurable?: Array<{ action: string; label: string }>;
+        }) => {
+          setAgentAutonomy(d.autonomy ?? {});
+          setAgentConfigurable(d.configurable ?? []);
+          setAgentUserId(d.agentUserId ?? '');
+        },
+      )
+      .catch(() => {});
   }, []);
+
+  async function saveAgent() {
+    setAgentStatus('Guardando…');
+    const res = await fetch('/api/settings/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autonomy: agentAutonomy, agentUserId }),
+    });
+    setAgentStatus(res.ok ? 'Guardado ✓' : 'Error al guardar');
+  }
 
   function updateLostReason(id: string, patch: Partial<LostReasonRow>) {
     setLostReasons((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -334,6 +367,64 @@ export default function SettingsPage() {
               Guardar
             </button>
             {lostReasonStatus && <span className="text-sm text-gray-600">{lostReasonStatus}</span>}
+          </div>
+        </section>
+      )}
+
+      {/* Agente — matriz de autonomía (AG-3) */}
+      {agentConfigurable.length > 0 && (
+        <section className="rounded-lg border p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Agente (autonomía)</h2>
+            <p className="text-sm text-gray-500">
+              Qué puede hacer el agente con cada acción del playbook. <strong>Off</strong>: la
+              ignora. <strong>Proponer</strong>: la encola y tú la apruebas con 1-click en Live
+              Opp. <strong>Automático</strong>: la ejecuta solo y deja nota [AGENTE]. Contactar al
+              cliente por WhatsApp no es configurable todavía.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {agentConfigurable.map(({ action, label }) => (
+              <div key={action} className="flex items-center gap-3">
+                <span className="w-44 text-sm">{label}</span>
+                <select
+                  value={agentAutonomy[action] ?? 'propose'}
+                  onChange={(e) =>
+                    setAgentAutonomy((prev) => ({ ...prev, [action]: e.target.value }))
+                  }
+                  className="rounded border px-2 py-1 text-sm"
+                >
+                  <option value="off">Off</option>
+                  <option value="propose">Proponer</option>
+                  <option value="auto">Automático</option>
+                </select>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">
+              Usuario GHL del agente (ID, opcional)
+            </label>
+            <input
+              type="text"
+              value={agentUserId}
+              onChange={(e) => setAgentUserId(e.target.value)}
+              placeholder="Ej: IGwHFLCrrd6wXSpE46RY (Valeria)"
+              className="w-full rounded border px-3 py-2 text-sm font-mono"
+            />
+            <p className="text-xs text-gray-400">
+              El usuario de GHL que firma las acciones del agente (dueño de contacto en gestión
+              del agente).
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={saveAgent}
+              className="rounded bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+            >
+              Guardar
+            </button>
+            {agentStatus && <span className="text-sm text-gray-600">{agentStatus}</span>}
           </div>
         </section>
       )}
