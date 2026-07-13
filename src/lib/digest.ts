@@ -7,6 +7,9 @@
  * que no golpea la API de GHL (salvo el mapa de usuarios para nombre/teléfono).
  */
 
+import { and, eq, gte, inArray, or } from 'drizzle-orm';
+import { db } from '@/db';
+import { agentActions } from '@/db/schema';
 import type { GhlCredentials } from '@/lib/ghl-client';
 import { fetchUserById, mapWithConcurrency, type GhlUser } from '@/lib/ghl-client';
 import { getSyncedDeals } from '@/lib/deal-sync';
@@ -37,6 +40,9 @@ export interface SellerDigest {
   highCount: number;
   totalValueAtRisk: number;
   opps: DigestOpp[];
+  /** Actividad del agente sobre los deals del vendedor (AG-3). */
+  agentExecuted: number;
+  agentProposed: number;
   text: string;
 }
 
@@ -59,6 +65,14 @@ function composeText(d: Omit<SellerDigest, 'text'>): string {
     lines.push(`${i + 1}. ${emoji} ${o.name} — $${fmtClp(o.value)}`);
     lines.push(`   → ${o.topAction}`);
   });
+  if (d.agentExecuted > 0 || d.agentProposed > 0) {
+    const parts: string[] = [];
+    if (d.agentExecuted > 0)
+      parts.push(`hizo ${d.agentExecuted} acción${d.agentExecuted === 1 ? '' : 'es'} por ti (últ. 24h)`);
+    if (d.agentProposed > 0)
+      parts.push(`${d.agentProposed} esperando tu OK en Sentinel`);
+    lines.push('', `🤖 Agente: ${parts.join(' · ')}.`);
+  }
   return lines.join('\n');
 }
 
@@ -114,6 +128,45 @@ export async function buildTenantDigests(
   }
   if (bySeller.size === 0) return [];
 
+  // Actividad del agente (AG-3) sobre los deals de cada vendedor: ejecutado en
+  // las últimas 24h + propuestas pendientes. Una consulta por tenant.
+  const dealOwner = new Map<string, string>();
+  for (const { deal } of synced) {
+    if (deal.assignedTo && (!salesPipelineId || deal.pipelineId === salesPipelineId)) {
+      dealOwner.set(deal.id, deal.assignedTo);
+    }
+  }
+  const agentBySeller = new Map<string, { executed: number; proposed: number }>();
+  try {
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
+    const rows = await db
+      .select({
+        dealGhlId: agentActions.dealGhlId,
+        status: agentActions.status,
+      })
+      .from(agentActions)
+      .where(
+        and(
+          eq(agentActions.tenantId, tenantId),
+          or(
+            eq(agentActions.status, 'proposed'),
+            and(eq(agentActions.status, 'executed'), gte(agentActions.updatedAt, dayAgo)),
+          ),
+          inArray(agentActions.dealGhlId, [...dealOwner.keys()]),
+        ),
+      );
+    for (const r of rows) {
+      const seller = dealOwner.get(r.dealGhlId);
+      if (!seller) continue;
+      const acc = agentBySeller.get(seller) ?? { executed: 0, proposed: 0 };
+      if (r.status === 'executed') acc.executed++;
+      else acc.proposed++;
+      agentBySeller.set(seller, acc);
+    }
+  } catch {
+    // La actividad del agente es opcional en el digest: no rompas el envío.
+  }
+
   // Resuelve nombre + teléfono de cada vendedor asignado por su ID
   // (`GET /users/{id}`): el listado de la location devuelve el `phone` vacío, y
   // así solo consultamos los usuarios que realmente tienen oportunidades en
@@ -129,6 +182,7 @@ export async function buildTenantDigests(
   for (const [sellerId, opps] of bySeller) {
     opps.sort((a, b) => b.riskScore - a.riskScore);
     const user = userById.get(sellerId);
+    const agent = agentBySeller.get(sellerId) ?? { executed: 0, proposed: 0 };
     const base = {
       sellerId,
       sellerName: user?.name ?? 'vendedor',
@@ -137,6 +191,8 @@ export async function buildTenantDigests(
       highCount: opps.filter((o) => o.riskLevel === 'high').length,
       totalValueAtRisk: opps.reduce((s, o) => s + o.value, 0),
       opps: opps.slice(0, MAX_OPPS_PER_SELLER),
+      agentExecuted: agent.executed,
+      agentProposed: agent.proposed,
     };
     digests.push({ ...base, text: composeText(base) });
   }

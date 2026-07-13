@@ -15,9 +15,25 @@
     "autoAlias": true
   },
   "crons": [
-    { "path": "/api/cron/sync", "schedule": "0 */2 * * *" },
-    { "path": "/api/cron/forense", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/won-track", "schedule": "0 7 * * 1" },
-    { "path": "/api/cron/digest", "schedule": "0 12 * * *" }
+    {
+      "path": "/api/cron/sync",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/forense",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/won-track",
+      "schedule": "0 7 * * 1"
+    },
+    {
+      "path": "/api/cron/agent",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/digest",
+      "schedule": "0 12 * * *"
+    }
   ]
 }

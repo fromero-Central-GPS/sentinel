@@ -49,6 +49,8 @@ export interface GhlTenant {
   fieldMap: CustomFieldMap;
   /** Pipeline de ventas del tenant (GHL). null → sin filtro (todas las opps). */
   salesPipelineId: string | null;
+  /** Matriz de autonomía del agente (JSON crudo; AG-3). null → default. */
+  agentAutonomy: string | null;
 }
 
 /**
@@ -70,6 +72,7 @@ export async function listGhlTenants(): Promise<GhlTenant[]> {
         creds: { token: decrypt(row.ghlApiToken), locationId: row.ghlLocationId },
         fieldMap: { plan: row.ghlFieldPlan ?? undefined, equipos: row.ghlFieldEquipos ?? undefined },
         salesPipelineId: row.ghlSalesPipelineId ?? null,
+        agentAutonomy: row.agentAutonomy ?? null,
       });
     } catch {
       // Token no desencriptable (key rotada / dato corrupto): sáltalo, no
