@@ -55,6 +55,16 @@ export const EXECUTABLE_ACTIONS: readonly AgentAction[] = [
   'escalar_a_humano',
 ] as const;
 
+/**
+ * Duración legible desde horas: "3h" hasta un día, "26h" hasta dos, y de ahí
+ * en adelante días ("12d"). Evita rationales tipo "hace 289h".
+ */
+export function formatHours(hours: number): string {
+  const h = Math.max(0, Math.round(hours));
+  if (h < 48) return `${h}h`;
+  return `${Math.round(h / 24)}d`;
+}
+
 /** Bitácora visible en GHL: `[AGENTE] fecha — acción — detalle` (doc §7). */
 export function formatAgentNote(action: AgentAction, detail: string): string {
   const date = new Date().toLocaleDateString('es-CL', {
@@ -186,7 +196,7 @@ export function decidePlaybookAction(
     return {
       ...base,
       action: 'escalar_a_humano',
-      rationale: `Cliente esperando respuesta${h != null ? ` hace ${h}h` : ''} — responder antes de cualquier seguimiento.`,
+      rationale: `Cliente esperando respuesta${h != null ? ` hace ${formatHours(h)}` : ''} — responder antes de cualquier seguimiento.`,
     };
   }
 

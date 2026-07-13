@@ -4,6 +4,7 @@ import {
   countUnansweredAttempts,
   decidePlaybookAction,
   formatAgentNote,
+  formatHours,
   EXECUTABLE_ACTIONS,
 } from '../playbook-engine';
 import type { LiveOppAnalysis } from '../live-opp-engine';
@@ -262,6 +263,14 @@ describe('decidePlaybookAction — cierre y frío', () => {
 });
 
 // ─── AG-2: nota [AGENTE] y acciones ejecutables ───────────────────────────────
+
+describe('formatHours', () => {
+  it('horas hasta 48h, días después', () => {
+    expect(formatHours(3)).toBe('3h');
+    expect(formatHours(26)).toBe('26h');
+    expect(formatHours(289)).toBe('12d');
+  });
+});
 
 describe('formatAgentNote / EXECUTABLE_ACTIONS', () => {
   it('formatea la bitácora [AGENTE] fecha — acción — detalle', () => {

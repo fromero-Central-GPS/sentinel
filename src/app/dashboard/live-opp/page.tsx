@@ -10,7 +10,34 @@ type Playbook = {
   executable: boolean;
   contactId: string;
   pipelineId?: string;
+  attempts: number;
+  daysInStage: number;
 };
+
+type Resumen = {
+  contacto: {
+    name: string;
+    email: string | null;
+    phone: string | null;
+    company: string | null;
+  };
+  lastMessage: { who: 'cliente' | 'equipo'; when: string; snippet: string } | null;
+  totalMessages: number;
+  messagesInLast7Days: number;
+  attempts: number;
+  daysInStage: number;
+  intentSignals: string[];
+  lastAgentAction: { label: string; when: string } | null;
+};
+
+/** "hace 3h" / "hace 12d" desde un ISO. */
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const hours = Math.round(ms / 3_600_000);
+  if (hours < 48) return `hace ${hours}h`;
+  return `hace ${Math.round(hours / 24)}d`;
+}
 
 type Opportunity = {
   id: string;
@@ -28,6 +55,7 @@ type Opportunity = {
   riskLevel: string;
   recommendedActions: string[];
   playbook?: Playbook;
+  resumen?: Resumen;
 };
 
 function formatDate(iso?: string): string {
@@ -332,6 +360,86 @@ export default function LiveOppPage() {
                       {isExpanded && (opp.playbook || opp.recommendedActions.length > 0) && (
                         <tr className="bg-zinc-50">
                           <td colSpan={8} className="px-4 pb-4 pt-0">
+                            {opp.resumen && (
+                              <div className="mb-3 rounded-lg border border-zinc-200 bg-white p-3">
+                                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                                  Estado del lead
+                                </p>
+                                <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2 text-sm text-zinc-700">
+                                  <p>
+                                    <span className="text-zinc-400">Contacto:</span>{' '}
+                                    {opp.resumen.contacto.name}
+                                    {opp.resumen.contacto.company
+                                      ? ` · ${opp.resumen.contacto.company}`
+                                      : ''}
+                                  </p>
+                                  <p className="truncate">
+                                    {opp.resumen.contacto.phone && (
+                                      <span className="mr-3 font-mono text-xs">
+                                        {opp.resumen.contacto.phone}
+                                      </span>
+                                    )}
+                                    {opp.resumen.contacto.email && (
+                                      <span className="font-mono text-xs">
+                                        {opp.resumen.contacto.email}
+                                      </span>
+                                    )}
+                                    {!opp.resumen.contacto.phone &&
+                                      !opp.resumen.contacto.email && (
+                                        <span className="text-zinc-400">
+                                          Sin teléfono ni email registrados
+                                        </span>
+                                      )}
+                                  </p>
+                                  <p className="sm:col-span-2">
+                                    <span className="text-zinc-400">Última actividad:</span>{' '}
+                                    {opp.resumen.lastMessage ? (
+                                      <>
+                                        {opp.resumen.lastMessage.who === 'cliente'
+                                          ? 'el cliente escribió'
+                                          : 'el equipo escribió'}{' '}
+                                        {timeAgo(opp.resumen.lastMessage.when)}
+                                        {opp.resumen.lastMessage.snippet && (
+                                          <span className="text-zinc-500">
+                                            {' '}
+                                            — «{opp.resumen.lastMessage.snippet}»
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      'sin conversación registrada'
+                                    )}
+                                  </p>
+                                  <p>
+                                    <span className="text-zinc-400">Conversación:</span>{' '}
+                                    {opp.resumen.totalMessages} mensajes ·{' '}
+                                    {opp.resumen.messagesInLast7Days} últimos 7d
+                                  </p>
+                                  <p>
+                                    <span className="text-zinc-400">Gestión:</span>{' '}
+                                    {opp.resumen.attempts > 0
+                                      ? `${opp.resumen.attempts} intento${opp.resumen.attempts === 1 ? '' : 's'} sin respuesta`
+                                      : 'sin intentos pendientes'}{' '}
+                                    · {opp.resumen.daysInStage}d en la etapa
+                                  </p>
+                                  {opp.resumen.intentSignals.length > 0 && (
+                                    <p className="sm:col-span-2">
+                                      <span className="text-zinc-400">Señales:</span>{' '}
+                                      {opp.resumen.intentSignals
+                                        .map((s) => s.replaceAll('_', ' '))
+                                        .join(' · ')}
+                                    </p>
+                                  )}
+                                  {opp.resumen.lastAgentAction && (
+                                    <p className="sm:col-span-2 text-indigo-700">
+                                      <span className="text-zinc-400">Última acción del agente:</span>{' '}
+                                      {opp.resumen.lastAgentAction.label}{' '}
+                                      {timeAgo(opp.resumen.lastAgentAction.when)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                             {opp.playbook && (
                               <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
                                 <div className="flex flex-wrap items-center gap-3">
