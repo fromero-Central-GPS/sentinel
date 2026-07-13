@@ -114,20 +114,33 @@ Botones: `Sí, muéstrame` · `Tengo dudas` · `Todo bien`
 - La atribución del mensaje sigue al **Contact Owner** → asignar el contacto
   a Valeria antes de enviar.
 
-### Número remitente (probado 2026-07-13)
+### Número remitente y alcance por línea (regla definida 2026-07-13)
 
-La location tiene DOS líneas WhatsApp; con `fromNumberId: "placeholder"` GHL
-usa la que esté ligada a la conversación (o su default), lo que puede salir
-por el número equivocado. `whatsapp.fromNumberId` acepta el **Meta phone
-number ID** y fuerza el remitente incluso sobre una conversación ligada a
-otra línea (probado: pisó la ligadura y entregó):
+La location tiene DOS líneas WhatsApp que son **servicios distintos**:
 
-- `389184950940066` → **+56 9 8227 6290** (línea principal de ventas — usar SIEMPRE)
-- `1231571323370260` → +56 9 3878 3797 (línea secundaria)
+- `389184950940066` → **+56 9 8227 6290** — la línea donde opera el agente
+  (por ahora la ÚNICA en su alcance).
+- `1231571323370260` → +56 9 3878 3797 — otro servicio; sus clientes quedan
+  **fuera del alcance del agente**.
 
-Los IDs se descubren en `lastInboundWhatsappMap` del objeto conversación
-(GET /conversations/{id}). Para AG-4: config por tenant
-(`whatsappFromNumberId`), nunca "placeholder".
+Reglas para AG-4 (en orden):
+
+1. **Respetar la línea del cliente**: si la conversación existe, se responde
+   por la línea a la que el cliente escribió. Es el comportamiento default de
+   GHL (`fromNumberId: "placeholder"` usa la ligadura de la conversación) —
+   la ligadura es una feature, NO pisarla. (Técnicamente `fromNumberId` con
+   el Meta phone number ID puede forzar otra línea — probado — pero es
+   exactamente lo que el agente no debe hacer.)
+2. **Alcance**: el agente solo gestiona deals cuya conversación vive en su
+   línea (`389184950940066`). Conversación en otra línea → `no_tocar`.
+   Detección: `lastInboundWhatsappMap` de GET /conversations/{id} (o el
+   `from` de los mensajes).
+3. **Conversación nueva** (primer contacto R4, sin ligadura que respetar):
+   `fromNumberId` explícito con la línea del agente — ahí sí, nunca
+   "placeholder".
+
+Para AG-4: la línea del agente es config por tenant (`agentPhoneNumberId`),
+junto al usuario GHL del agente.
 
 ## Flujo de creación y verificación
 
