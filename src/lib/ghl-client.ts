@@ -457,6 +457,36 @@ export async function createContactTask(
 }
 
 /**
+ * Trae los datos de un contacto por id. El search de oportunidades NO devuelve
+ * email/teléfono en el objeto contact — este fetch completa lo que falta para
+ * el resumen de Live Opp. Devuelve null ante error controlado.
+ */
+export async function fetchContactById(
+  { token }: GhlCredentials,
+  contactId: string,
+): Promise<{ name?: string; email?: string; phone?: string; companyName?: string } | null> {
+  const res = await ghlFetch(`/contacts/${contactId}`, token);
+  if (!res.ok) return null;
+  const data = (await res.json().catch(() => null)) as {
+    contact?: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      phone?: string;
+      companyName?: string;
+    };
+  } | null;
+  const c = data?.contact;
+  if (!c) return null;
+  return {
+    name: [c.firstName, c.lastName].filter(Boolean).join(' ') || undefined,
+    email: c.email,
+    phone: c.phone,
+    companyName: c.companyName,
+  };
+}
+
+/**
  * Crea una nota sobre un contacto. El agente la usa como bitácora visible en
  * GHL (`[AGENTE] fecha — acción — detalle`), doc agente-vendedor §7.
  */
