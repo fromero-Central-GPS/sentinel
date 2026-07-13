@@ -18,6 +18,7 @@ import {
   EXECUTABLE_ACTIONS,
 } from '@/lib/playbook-engine';
 import {
+  fetchContactById,
   fetchOpportunities,
   fetchMessagesForContact,
   fetchStageMap,
@@ -300,42 +301,47 @@ export async function GET(request: Request) {
     }
   }
 
-  const analyzedOpps: Array<{
-    analysis: ReturnType<typeof analyzeLiveOpportunity>;
-    opportunityName: string;
-    comentarios: string;
-    owner: string | null;
-    createdAt: string;
-    playbook: ReturnType<typeof playbookForUi>;
-    resumen: ReturnType<typeof resumenForUi>;
-  }> = [];
+  // Primero determinamos las opps en riesgo; después completamos el contacto
+  // de las que vienen sin email/teléfono (el search de oportunidades no los
+  // trae) y recién ahí armamos el resumen.
+  const atRisk = deals
+    .map(({ opp, deal }, i) => ({
+      opp,
+      deal,
+      messages: messagesByOpp[i],
+      analysis: analyzeLiveOpportunity(deal, messagesByOpp[i], thresholds),
+    }))
+    .filter((x) => x.analysis.riskLevel !== 'none');
 
-  deals.forEach(({ opp, deal }, i) => {
-    const analysis = analyzeLiveOpportunity(deal, messagesByOpp[i], thresholds);
-    if (analysis.riskLevel !== 'none') {
-      // "Comentarios" (custom field de la oportunidad) = lo que el cliente cotiza.
-      const comentarios =
-        opp.customFields
-          ?.find((f) => f.id === DEFAULT_FIELD_MAP.comentarios)
-          ?.fieldValueString?.trim() || '';
-      const playbook = playbookForUi(deal, messagesByOpp[i], analysis);
-      analyzedOpps.push({
-        analysis,
-        // Nombre del deal (ej "Plan Lite Anual x2 | TRANSMACO"), aparte del contacto.
-        opportunityName: opp.name ?? deal.name ?? '',
-        comentarios,
-        owner: deal.assignedTo ? (userMap[deal.assignedTo] ?? null) : null,
-        createdAt: deal.createdAt,
-        playbook,
-        resumen: resumenForUi(
-          deal,
-          messagesByOpp[i],
-          analysis,
-          playbook,
-          lastActionByDeal.get(deal.id) ?? null,
-        ),
-      });
+  const missingContact = atRisk.filter((x) => !x.deal.contact.email && !x.deal.contact.phone);
+  await mapWithConcurrency(missingContact, 5, async (x) => {
+    const c = await fetchContactById(creds, x.deal.contactId).catch(() => null);
+    if (!c) return;
+    x.deal.contact.email = x.deal.contact.email ?? c.email;
+    x.deal.contact.phone = x.deal.contact.phone ?? c.phone;
+    x.deal.contact.companyName = x.deal.contact.companyName ?? c.companyName ?? null;
+    if (c.name && (!x.deal.contact.name || x.deal.contact.name === 'Desconocido')) {
+      x.deal.contact.name = c.name;
     }
+  });
+
+  const analyzedOpps = atRisk.map(({ opp, deal, messages, analysis }) => {
+    // "Comentarios" (custom field de la oportunidad) = lo que el cliente cotiza.
+    const comentarios =
+      opp.customFields
+        ?.find((f) => f.id === DEFAULT_FIELD_MAP.comentarios)
+        ?.fieldValueString?.trim() || '';
+    const playbook = playbookForUi(deal, messages, analysis);
+    return {
+      analysis,
+      // Nombre del deal (ej "Plan Lite Anual x2 | TRANSMACO"), aparte del contacto.
+      opportunityName: opp.name ?? deal.name ?? '',
+      comentarios,
+      owner: deal.assignedTo ? (userMap[deal.assignedTo] ?? null) : null,
+      createdAt: deal.createdAt,
+      playbook,
+      resumen: resumenForUi(deal, messages, analysis, playbook, lastActionByDeal.get(deal.id) ?? null),
+    };
   });
 
   const mappedOpps = analyzedOpps
