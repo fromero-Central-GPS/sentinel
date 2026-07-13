@@ -103,7 +103,7 @@ Botones: `Sí, muéstrame` · `Tengo dudas` · `Todo bien`
     "type": "template",
     "template": { "name": "valeria_seguimiento_consulta", "lang": "es" },
     "placeholders": { "header": [], "body": ["<nombre>"], "buttons": [] },
-    "fromNumberId": "placeholder",
+    "fromNumberId": "<Meta phone number ID — SIEMPRE explícito>",
     "toNumber": "<+569XXXXXXXX>"
   }
 }
@@ -113,6 +113,21 @@ Botones: `Sí, muéstrame` · `Tengo dudas` · `Todo bien`
 - Los botones quick-reply no llevan placeholder (van vacíos en `buttons`).
 - La atribución del mensaje sigue al **Contact Owner** → asignar el contacto
   a Valeria antes de enviar.
+
+### Número remitente (probado 2026-07-13)
+
+La location tiene DOS líneas WhatsApp; con `fromNumberId: "placeholder"` GHL
+usa la que esté ligada a la conversación (o su default), lo que puede salir
+por el número equivocado. `whatsapp.fromNumberId` acepta el **Meta phone
+number ID** y fuerza el remitente incluso sobre una conversación ligada a
+otra línea (probado: pisó la ligadura y entregó):
+
+- `389184950940066` → **+56 9 8227 6290** (línea principal de ventas — usar SIEMPRE)
+- `1231571323370260` → +56 9 3878 3797 (línea secundaria)
+
+Los IDs se descubren en `lastInboundWhatsappMap` del objeto conversación
+(GET /conversations/{id}). Para AG-4: config por tenant
+(`whatsappFromNumberId`), nunca "placeholder".
 
 ## Flujo de creación y verificación
 
