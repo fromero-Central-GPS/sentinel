@@ -138,7 +138,7 @@ describe('decidePlaybookAction — guards de coordinación', () => {
     expect(d.action).toBe('no_tocar');
   });
 
-  it('cliente esperando respuesta → escalar_a_humano', () => {
+  it('cliente esperando respuesta reciente → escalar_a_humano', () => {
     const analysis = mkAnalysis({
       alerts: [
         {
@@ -157,6 +157,27 @@ describe('decidePlaybookAction — guards de coordinación', () => {
     const d = decidePlaybookAction(mkDeal(), [msg('inbound', 1)], analysis);
     expect(d.action).toBe('escalar_a_humano');
     expect(d.rationale).toContain('esperando respuesta');
+  });
+
+  it('espera antigua (> tope) NO escala — decide la ronda', () => {
+    const analysis = mkAnalysis({
+      alerts: [
+        {
+          category: 'no_response',
+          severity: 'critical',
+          title: 'x',
+          detail: 'x',
+          metric: 'hours_since_inbound',
+          currentValue: 289,
+          threshold: 1,
+          direction: 'above',
+        },
+      ],
+      hoursSinceLastInbound: 289,
+    });
+    // Recibido con 1 intento → la ronda decide contactar, no escalar.
+    const d = decidePlaybookAction(mkDeal(), [msg('inbound', 13), msg('outbound', 12)], analysis);
+    expect(d.action).toBe('contactar_cliente');
   });
 });
 
