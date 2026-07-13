@@ -12,12 +12,15 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { recommendationEvents, deals } from '@/db/schema';
 
+import type { AgentAction } from '@/lib/taxonomy';
+
 export interface RecordEventInput {
   tenantId: string;
   dealGhlId: string;
   contactId?: string;
   engine: 'forense' | 'live_opp';
-  action: 'tag' | 'task';
+  /** 1-click de Forense ('tag'/'task') o acción del agente (AG-2+). */
+  action: 'tag' | 'task' | AgentAction;
   reason?: string;
   statusAtEvent?: string;
   valueAtEvent?: number;

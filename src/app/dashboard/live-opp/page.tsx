@@ -2,6 +2,16 @@
 
 import { Fragment, useEffect, useState } from 'react';
 
+type Playbook = {
+  action: string;
+  label: string;
+  rationale: string;
+  taskDueInDays?: number;
+  executable: boolean;
+  contactId: string;
+  pipelineId?: string;
+};
+
 type Opportunity = {
   id: string;
   name: string;
@@ -17,6 +27,7 @@ type Opportunity = {
   value: number;
   riskLevel: string;
   recommendedActions: string[];
+  playbook?: Playbook;
 };
 
 function formatDate(iso?: string): string {
@@ -76,6 +87,46 @@ export default function LiveOppPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'mock'>('live');
+  // Estado de ejecución 1-click por oportunidad (AG-2).
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<Record<string, { ok: boolean; msg: string }>>(
+    {},
+  );
+
+  async function executeAction(opp: Opportunity) {
+    const pb = opp.playbook;
+    if (!pb || !pb.executable || actionBusy) return;
+    setActionBusy(opp.id);
+    try {
+      const res = await fetch('/api/actions/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: pb.action,
+          dealId: opp.id,
+          contactId: pb.contactId,
+          contactName: opp.name,
+          pipelineId: pb.pipelineId,
+          rationale: pb.rationale,
+          taskDueInDays: pb.taskDueInDays,
+          value: opp.value,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok || d.error) throw new Error(d.detail ? `${d.error} — ${d.detail}` : d.error);
+      setActionResult((prev) => ({
+        ...prev,
+        [opp.id]: { ok: true, msg: `${pb.label}: ejecutado (con nota [AGENTE] en GHL).` },
+      }));
+    } catch (e) {
+      setActionResult((prev) => ({
+        ...prev,
+        [opp.id]: { ok: false, msg: e instanceof Error ? e.message : String(e) },
+      }));
+    } finally {
+      setActionBusy(null);
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -278,20 +329,56 @@ export default function LiveOppPage() {
                           {isExpanded ? '▲' : '▼'}
                         </td>
                       </tr>
-                      {isExpanded && opp.recommendedActions.length > 0 && (
+                      {isExpanded && (opp.playbook || opp.recommendedActions.length > 0) && (
                         <tr className="bg-zinc-50">
                           <td colSpan={8} className="px-4 pb-4 pt-0">
-                            <div className="space-y-1.5">
-                              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                                Acciones recomendadas
-                              </p>
-                              {opp.recommendedActions.map((action, i) => (
-                                <p key={i} className="text-sm text-zinc-700 flex items-start gap-2">
-                                  <span className="text-zinc-400 mt-0.5">•</span>
-                                  <span>{action}</span>
+                            {opp.playbook && (
+                              <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <span className="inline-flex items-center rounded-full bg-indigo-600 px-2.5 py-0.5 text-xs font-semibold text-white">
+                                    {opp.playbook.label}
+                                  </span>
+                                  <span className="text-sm text-zinc-700">
+                                    {opp.playbook.rationale}
+                                  </span>
+                                  {opp.playbook.executable && !actionResult[opp.id]?.ok && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        executeAction(opp);
+                                      }}
+                                      disabled={actionBusy === opp.id}
+                                      className="ml-auto rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                                    >
+                                      {actionBusy === opp.id ? 'Ejecutando…' : 'Ejecutar en GHL'}
+                                    </button>
+                                  )}
+                                </div>
+                                {actionResult[opp.id] && (
+                                  <p
+                                    className={`mt-2 text-xs ${actionResult[opp.id].ok ? 'text-green-700' : 'text-red-600'}`}
+                                  >
+                                    {actionResult[opp.id].msg}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {opp.recommendedActions.length > 0 && (
+                              <div className="space-y-1.5">
+                                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                                  Acciones recomendadas
                                 </p>
-                              ))}
-                            </div>
+                                {opp.recommendedActions.map((action, i) => (
+                                  <p
+                                    key={i}
+                                    className="text-sm text-zinc-700 flex items-start gap-2"
+                                  >
+                                    <span className="text-zinc-400 mt-0.5">•</span>
+                                    <span>{action}</span>
+                                  </p>
+                                ))}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )}

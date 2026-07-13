@@ -44,6 +44,28 @@ export const ACTION_LABELS: Record<AgentAction, string> = {
   monitorear: 'Monitorear',
 };
 
+/**
+ * Acciones ejecutables con 1-click en AG-2 (solo tocan CRM/vendedor, nunca al
+ * cliente). `contactar_cliente`/`ultimo_intento` requieren AG-4 (HSM).
+ */
+export const EXECUTABLE_ACTIONS: readonly AgentAction[] = [
+  'crear_tarea_vendedor',
+  'crear_nota',
+  'mover_a_frio',
+  'escalar_a_humano',
+] as const;
+
+/** Bitácora visible en GHL: `[AGENTE] fecha — acción — detalle` (doc §7). */
+export function formatAgentNote(action: AgentAction, detail: string): string {
+  const date = new Date().toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'America/Santiago',
+  });
+  return `[AGENTE] ${date} — ${ACTION_LABELS[action]} — ${detail}`;
+}
+
 // ─── Etapa canónica desde el nombre de etapa GHL ─────────────────────────────
 
 /**
