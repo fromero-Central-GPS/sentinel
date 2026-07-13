@@ -3,6 +3,8 @@ import {
   canonicalStageFromName,
   countUnansweredAttempts,
   decidePlaybookAction,
+  formatAgentNote,
+  EXECUTABLE_ACTIONS,
 } from '../playbook-engine';
 import type { LiveOppAnalysis } from '../live-opp-engine';
 import type { CanonicalMessage, Deal } from '../types';
@@ -256,5 +258,21 @@ describe('decidePlaybookAction — cierre y frío', () => {
     const d = decidePlaybookAction(deal, [], mkAnalysis());
     expect(d.action).toBe('monitorear');
     expect(d.stage).toBeNull();
+  });
+});
+
+// ─── AG-2: nota [AGENTE] y acciones ejecutables ───────────────────────────────
+
+describe('formatAgentNote / EXECUTABLE_ACTIONS', () => {
+  it('formatea la bitácora [AGENTE] fecha — acción — detalle', () => {
+    const note = formatAgentNote('crear_tarea_vendedor', '10d sin gestión.');
+    expect(note).toMatch(/^\[AGENTE\] \d{2}-\d{2}-\d{4} — Crear tarea — 10d sin gestión\.$/);
+  });
+
+  it('las acciones que tocan al cliente NO son ejecutables en AG-2', () => {
+    expect(EXECUTABLE_ACTIONS).not.toContain('contactar_cliente');
+    expect(EXECUTABLE_ACTIONS).not.toContain('ultimo_intento');
+    expect(EXECUTABLE_ACTIONS).toContain('mover_a_frio');
+    expect(EXECUTABLE_ACTIONS).toContain('crear_tarea_vendedor');
   });
 });

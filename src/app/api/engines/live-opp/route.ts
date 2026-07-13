@@ -10,7 +10,13 @@ import {
   incrementUsage,
 } from '@/lib/plan-enforcement';
 import { analyzeLiveOpportunity, getDefaultThresholds } from '@/lib/live-opp-engine';
-import type { OpenOpportunity } from '@/lib/live-opp-engine';
+import type { LiveOppAnalysis, OpenOpportunity } from '@/lib/live-opp-engine';
+import type { CanonicalMessage, Deal } from '@/lib/types';
+import {
+  decidePlaybookAction,
+  ACTION_LABELS,
+  EXECUTABLE_ACTIONS,
+} from '@/lib/playbook-engine';
 import {
   fetchOpportunities,
   fetchMessagesForContact,
@@ -21,6 +27,23 @@ import {
 import { toDeal, toMessages } from '@/lib/types';
 import { DEFAULT_FIELD_MAP } from '@/lib/won-track-engine';
 import { getTenantThresholds } from '@/lib/won-track-store';
+
+/**
+ * Decisión del playbook (AG-1/AG-2) en la forma que consume la UI: acción
+ * tipificada + rationale + lo que el botón de ejecución necesita postear.
+ */
+function playbookForUi(deal: Deal, messages: CanonicalMessage[], analysis: LiveOppAnalysis) {
+  const d = decidePlaybookAction(deal, messages, analysis);
+  return {
+    action: d.action,
+    label: ACTION_LABELS[d.action],
+    rationale: d.rationale,
+    taskDueInDays: d.taskDueInDays,
+    executable: EXECUTABLE_ACTIONS.includes(d.action),
+    contactId: deal.contactId,
+    pipelineId: deal.pipelineId,
+  };
+}
 
 export async function GET(request: Request) {
   const { orgId } = await auth();
@@ -37,6 +60,7 @@ export async function GET(request: Request) {
       comentarios: string;
       owner: string | null;
       createdAt: string;
+      playbook: ReturnType<typeof playbookForUi>;
     }> = [];
 
     const mockOpps: OpenOpportunity[] = [
@@ -113,12 +137,13 @@ export async function GET(request: Request) {
           comentarios: mockComentarios[opp.id] ?? '',
           owner: opp.assignedTo ? (mockOwners[opp.assignedTo] ?? null) : null,
           createdAt: opp.createdAt,
+          playbook: playbookForUi(opp, messages, analysis),
         });
       }
     }
 
     const mappedOpps = analyzedOpps
-      .map(({ analysis: a, opportunityName, comentarios, owner, createdAt }) => ({
+      .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook }) => ({
         id: a.opportunityId,
         name: a.contactName || a.opportunityId,
         opportunityName,
@@ -133,6 +158,7 @@ export async function GET(request: Request) {
         value: a.value,
         riskLevel: a.riskLevel,
         recommendedActions: a.recommendedActions.slice(0, 3),
+        playbook,
       }))
       .sort((a, b) => b.riskScore - a.riskScore);
 
@@ -214,6 +240,7 @@ export async function GET(request: Request) {
     comentarios: string;
     owner: string | null;
     createdAt: string;
+    playbook: ReturnType<typeof playbookForUi>;
   }> = [];
 
   deals.forEach(({ opp, deal }, i) => {
@@ -231,12 +258,13 @@ export async function GET(request: Request) {
         comentarios,
         owner: deal.assignedTo ? (userMap[deal.assignedTo] ?? null) : null,
         createdAt: deal.createdAt,
+        playbook: playbookForUi(deal, messagesByOpp[i], analysis),
       });
     }
   });
 
   const mappedOpps = analyzedOpps
-    .map(({ analysis: a, opportunityName, comentarios, owner, createdAt }) => ({
+    .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook }) => ({
       id: a.opportunityId,
       name: a.contactName || a.opportunityId,
       opportunityName,
@@ -252,6 +280,7 @@ export async function GET(request: Request) {
       value: a.value,
       riskLevel: a.riskLevel,
       recommendedActions: a.recommendedActions.slice(0, 3),
+      playbook,
     }))
     .sort((a, b) => b.riskScore - a.riskScore);
 

@@ -202,6 +202,48 @@ export const llmAnalysis = pgTable(
 // resuelve después cruzando `dealGhlId` con el status actual del deal en
 // `deals`: un deal que estaba perdido al actuar y hoy está won/open = recuperado.
 // Es la base para medir el uplift del producto (argumento de venta).
+// ─── Agente vendedor (AG-2) ───────────────────────────────────────────────
+//
+// Cola y bitácora de las acciones tipificadas del playbook. En AG-2 cada fila
+// nace 'executed' (botón 1-click con humano aprobando); en AG-3 el cron del
+// agente crea filas 'proposed' y ejecuta solas las que su nivel de autonomía
+// permite. Ver docs/agente-vendedor-arquitectura.md §8.
+export const agentActions = pgTable('agent_actions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: text('tenant_id').notNull(),
+  /** Oportunidad (ghlId) sobre la que se decidió la acción. */
+  dealGhlId: text('deal_ghl_id').notNull(),
+  contactId: text('contact_id'),
+  /** AgentAction de la taxonomía (contactar_cliente, mover_a_frio, …). */
+  action: text('action').notNull(),
+  /** JSON: rationale, taskDueInDays, stage destino, texto del mensaje, etc. */
+  params: text('params'),
+  status: text('status').notNull().default('proposed'), // proposed|approved|executed|rejected|expired|failed
+  decidedBy: text('decided_by').notNull().default('playbook'), // playbook | llm | humano
+  /** Clerk userId del humano que aprobó/ejecutó (null cuando sea autónomo). */
+  approvedBy: text('approved_by'),
+  executedAt: timestamp('executed_at'),
+  /** JSON: ids creados en GHL (taskId, noteId, messageId…). */
+  ghlRefs: text('ghl_refs'),
+  error: text('error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Historial de transiciones de ownership por deal (humano|agente|escalado|
+// pausado). El estado operativo vive en GHL (Contact Owner + tag ai-pausado);
+// esta tabla es auditoría y métricas. Vigente = última fila del deal.
+export const dealOwnership = pgTable('deal_ownership', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: text('tenant_id').notNull(),
+  dealGhlId: text('deal_ghl_id').notNull(),
+  owner: text('owner').notNull(), // humano | agente | escalado | pausado
+  reason: text('reason'),
+  /** Quién gatilló la transición (clerk userId, 'playbook', 'sync'…). */
+  actor: text('actor'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const recommendationEvents = pgTable('recommendation_events', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: text('tenant_id').notNull(),

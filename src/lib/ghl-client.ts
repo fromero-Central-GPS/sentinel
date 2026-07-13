@@ -79,6 +79,36 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}`, Version: GHL_VERSION };
 }
 
+/** PUT a GHL con el mismo criterio de reintento que `ghlPost`. */
+async function ghlPut(
+  path: string,
+  token: string,
+  body: unknown,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<unknown> {
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${GHL_BASE}${path}`, {
+      method: 'PUT',
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const waitMs =
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 600 * 2 ** attempt;
+      await new Promise((r) => setTimeout(r, Math.min(waitMs, 8000)));
+      continue;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`GHL PUT ${path} ${res.status}: ${text}`);
+    }
+    return res.json().catch(() => ({}));
+  }
+}
+
 /**
  * POST a GHL con reintento ante 429 (mismo criterio que `ghlFetch`). Se usa para
  * las acciones de escritura (tags, tareas). Lanza si la respuesta no es OK.
@@ -424,6 +454,49 @@ export async function createContactTask(
     completed: false,
   })) as { task?: { id?: string }; id?: string };
   return { id: result.task?.id ?? result.id };
+}
+
+/**
+ * Crea una nota sobre un contacto. El agente la usa como bitácora visible en
+ * GHL (`[AGENTE] fecha — acción — detalle`), doc agente-vendedor §7.
+ */
+export async function createContactNote(
+  { token }: GhlCredentials,
+  contactId: string,
+  body: string,
+): Promise<{ id?: string }> {
+  const result = (await ghlPost(`/contacts/${contactId}/notes`, token, { body })) as {
+    note?: { id?: string };
+    id?: string;
+  };
+  return { id: result.note?.id ?? result.id };
+}
+
+/** Mueve una oportunidad a otra etapa del pipeline (p.ej. a Frío). */
+export async function updateOpportunityStage(
+  { token }: GhlCredentials,
+  opportunityId: string,
+  pipelineStageId: string,
+): Promise<void> {
+  await ghlPut(`/opportunities/${opportunityId}`, token, { pipelineStageId });
+}
+
+/**
+ * Busca la etapa "Frío" (o equivalente) dentro de un pipeline. Devuelve null si
+ * el pipeline no tiene una etapa que calce — el caller decide el fallback.
+ */
+export async function findColdStage(
+  creds: GhlCredentials,
+  pipelineId: string,
+): Promise<{ id: string; name: string } | null> {
+  const res = await ghlFetch(`/opportunities/pipelines?locationId=${creds.locationId}`, creds.token);
+  if (!res.ok) return null;
+  const data = (await res.json().catch(() => null)) as {
+    pipelines?: Array<{ id?: string; stages?: Array<{ id: string; name: string }> }>;
+  } | null;
+  const pipeline = data?.pipelines?.find((p) => p.id === pipelineId);
+  const stage = pipeline?.stages?.find((s) => /fr[ií]o|dormid|nurtur/i.test(s.name));
+  return stage ? { id: stage.id, name: stage.name } : null;
 }
 
 /** Verifica credenciales contra el endpoint de location. */
