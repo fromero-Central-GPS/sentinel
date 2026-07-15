@@ -1,5 +1,5 @@
 /**
- * Cassper Analysis Engine
+ * Sentinel Analysis Engine
  *
  * Motor de análisis automático de conversaciones GHL.
  * Implementa los 5 patrones de análisis definidos en CEN-755:

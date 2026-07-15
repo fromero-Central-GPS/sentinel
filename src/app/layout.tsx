@@ -14,8 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Sentinel',
-  description: 'Fleet intelligence and monitoring platform',
+  title: {
+    default: 'Sentinel — Inteligencia comercial para equipos de venta',
+    template: '%s · Sentinel',
+  },
+  description:
+    'Sentinel analiza las conversaciones de tu CRM con IA: clasifica negocios perdidos, alerta oportunidades en riesgo y descubre los patrones de tus ventas ganadas.',
 };
 
 export default function RootLayout({
@@ -25,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up">
-      <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+      <html lang="es" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
         <body className="min-h-full flex flex-col">{children}</body>
       </html>
     </ClerkProvider>
