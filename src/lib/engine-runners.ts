@@ -22,7 +22,13 @@ import { appSettings } from '@/db/schema';
 import { decrypt } from '@/lib/encryption';
 import type { GhlCredentials } from '@/lib/ghl-client';
 import { mapWithConcurrency } from '@/lib/ghl-client';
-import { getSyncedDeals, getSyncStatus, syncDealsPage, type SyncCursor } from '@/lib/deal-sync';
+import {
+  getSyncedDeals,
+  getSyncStatus,
+  reconcileDeletedDeals,
+  syncDealsPage,
+  type SyncCursor,
+} from '@/lib/deal-sync';
 import { resolveWorkingAIConfig } from '@/lib/ai-config';
 import { getLlmAnalysis, saveLlmAnalysis } from '@/lib/llm-store';
 import { diagnoseLossReasonLLM } from '@/lib/forense-llm';
@@ -101,6 +107,8 @@ export interface SyncRunResult {
   pages: number;
   processed: number;
   messagesFetched: number;
+  /** Deals `open` borrados por reconciliación (desaparecidos de GHL). Solo si `done`. */
+  deleted: number;
   done: boolean;
   error?: string;
 }
@@ -117,6 +125,10 @@ export async function runSyncForTenant(
   opts?: { maxPages?: number },
 ): Promise<SyncRunResult> {
   const maxPages = opts?.maxPages ?? SYNC_MAX_PAGES;
+  // Marca el inicio ANTES del primer upsert: todo deal vivo quedará con
+  // `synced_at ≥ runStartedAt` durante el barrido; los que no, fueron borrados
+  // en GHL y se reconcilian al final (ver `reconcileDeletedDeals`).
+  const runStartedAt = new Date();
   let cursor: SyncCursor | null = null;
   let pages = 0;
   let processed = 0;
@@ -129,13 +141,17 @@ export async function runSyncForTenant(
       messagesFetched += result.messagesFetched;
       cursor = result.cursor;
     } while (cursor && pages < maxPages);
-    return { tenantId, pages, processed, messagesFetched, done: cursor === null };
+    const done = cursor === null;
+    // Solo reconciliar si el barrido terminó: uno parcial no vio todo el funnel.
+    const deleted = done ? await reconcileDeletedDeals(tenantId, runStartedAt) : 0;
+    return { tenantId, pages, processed, messagesFetched, deleted, done };
   } catch (err) {
     return {
       tenantId,
       pages,
       processed,
       messagesFetched,
+      deleted: 0,
       done: false,
       error: err instanceof Error ? err.message : String(err),
     };

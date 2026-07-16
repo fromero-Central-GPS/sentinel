@@ -11,7 +11,7 @@
  * re-traen para deals nuevos o que cambiaron desde la última sincronización.
  */
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { deals, dealMessages, appSettings } from '@/db/schema';
 import {
@@ -156,6 +156,51 @@ export async function syncDealsPage(
     cursor: next,
     done: next === null,
   };
+}
+
+/**
+ * Reconciliación de borrados — SOLO oportunidades `open`. El sync es solo upsert,
+ * así que sin esto una oportunidad abierta borrada en GHL queda huérfana en la BD
+ * para siempre y sigue apareciendo como "fantasma" en el digest / Live Opp
+ * (bug jul-2026: leads inexistentes como Angelo Escobar / Angeli Peña).
+ *
+ * Criterio: tras un barrido COMPLETO del funnel, todo deal vivo quedó
+ * re-upserteado con `synced_at ≥ runStartedAt`; una fila `open` con `synced_at`
+ * anterior no volvió a aparecer en GHL ⇒ fue borrada allá. Las transiciones
+ * (open→won/lost) NO caen aquí: conservan el mismo `ghl_id`, así que el barrido
+ * las re-upsertea con el nuevo status y `synced_at` fresco.
+ *
+ * Deliberadamente NO tocamos `won`/`lost`: son la base histórica que recomputan
+ * Won Track (`getSyncedDeals('won')`) y Forense (`getSyncedDeals('lost')`). Si
+ * GHL dejara de devolver un won/lost viejo (archivado o deriva de paginación, no
+ * un borrado real), eliminarlo encogería el histórico de análisis. Un won/lost
+ * borrado de verdad es raro e inofensivo si permanece (no llega al digest).
+ *
+ * IMPORTANTE: solo invocar cuando el barrido terminó (`done === true`). Uno
+ * parcial no vio todo el funnel y borraría deals `open` vivos aún no
+ * re-sincronizados en esta corrida.
+ */
+export async function reconcileDeletedDeals(
+  tenantId: string,
+  runStartedAt: Date,
+): Promise<number> {
+  const stale = await db
+    .select({ ghlId: deals.ghlId })
+    .from(deals)
+    .where(
+      and(
+        eq(deals.tenantId, tenantId),
+        eq(deals.status, 'open'),
+        lt(deals.syncedAt, runStartedAt),
+      ),
+    );
+  if (stale.length === 0) return 0;
+  const ids = stale.map((r) => r.ghlId);
+  await db
+    .delete(dealMessages)
+    .where(and(eq(dealMessages.tenantId, tenantId), inArray(dealMessages.dealGhlId, ids)));
+  await db.delete(deals).where(and(eq(deals.tenantId, tenantId), inArray(deals.ghlId, ids)));
+  return ids.length;
 }
 
 // ─── Lectura para los motores ────────────────────────────────────────────────
