@@ -107,7 +107,7 @@ export interface SyncRunResult {
   pages: number;
   processed: number;
   messagesFetched: number;
-  /** Deals borrados por reconciliación (desaparecidos de GHL). Solo si `done`. */
+  /** Deals `open` borrados por reconciliación (desaparecidos de GHL). Solo si `done`. */
   deleted: number;
   done: boolean;
   error?: string;
