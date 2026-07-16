@@ -11,7 +11,7 @@
  * re-traen para deals nuevos o que cambiaron desde la última sincronización.
  */
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { deals, dealMessages, appSettings } from '@/db/schema';
 import {
@@ -156,6 +156,37 @@ export async function syncDealsPage(
     cursor: next,
     done: next === null,
   };
+}
+
+/**
+ * Reconciliación de borrados: elimina los deals (y sus mensajes) que GHL ya no
+ * devuelve. El sync es solo upsert, así que sin esto una oportunidad borrada en
+ * GHL queda huérfana en la BD para siempre, alimentando digest/Live Opp/Forense
+ * como un "fantasma" (bug jul-2026: leads inexistentes en el digest matinal).
+ *
+ * Criterio: tras un barrido COMPLETO del funnel, todo deal vivo quedó
+ * re-upserteado con `synced_at ≥ runStartedAt`; los que conservan un `synced_at`
+ * anterior no aparecieron en GHL y por tanto fueron borrados allá.
+ *
+ * IMPORTANTE: solo invocar cuando el barrido terminó (`done === true`). Un
+ * barrido parcial (cortado por el presupuesto de páginas o un error) no vio todo
+ * el funnel, y borraría deals vivos aún no re-sincronizados en esta corrida.
+ */
+export async function reconcileDeletedDeals(
+  tenantId: string,
+  runStartedAt: Date,
+): Promise<number> {
+  const stale = await db
+    .select({ ghlId: deals.ghlId })
+    .from(deals)
+    .where(and(eq(deals.tenantId, tenantId), lt(deals.syncedAt, runStartedAt)));
+  if (stale.length === 0) return 0;
+  const ids = stale.map((r) => r.ghlId);
+  await db
+    .delete(dealMessages)
+    .where(and(eq(dealMessages.tenantId, tenantId), inArray(dealMessages.dealGhlId, ids)));
+  await db.delete(deals).where(and(eq(deals.tenantId, tenantId), inArray(deals.ghlId, ids)));
+  return ids.length;
 }
 
 // ─── Lectura para los motores ────────────────────────────────────────────────
