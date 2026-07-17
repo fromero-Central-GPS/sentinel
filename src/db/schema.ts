@@ -249,6 +249,48 @@ export const dealOwnership = pgTable('deal_ownership', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// ─── Radar de Conversaciones (R-1) ────────────────────────────────────────
+//
+// Conversaciones de GHL clasificadas por intención de compra, para pescar las
+// que NUNCA generaron oportunidad (el hueco que Live Opp, opportunity-driven, no
+// cubre). Se puebla desde `conversations/search` (que trae `lastMessageBody` +
+// `unreadCount` inline) y se cruza contra `deals` para el flag `hasOpportunity`.
+// Ver docs/radar-conversaciones-propuesta.md.
+export const radarConversations = pgTable(
+  'radar_conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tenantId: text('tenant_id').notNull(),
+    /** ID de la conversación en GHL. */
+    ghlConversationId: text('ghl_conversation_id').notNull(),
+    contactId: text('contact_id'),
+    contactName: text('contact_name'),
+    phone: text('phone'),
+    email: text('email'),
+    /** Snippet del último mensaje (para la UI; no guardamos el hilo completo). */
+    lastMessageSnippet: text('last_message_snippet'),
+    lastMessageDirection: text('last_message_direction'), // inbound | outbound
+    lastMessageAt: timestamp('last_message_at'),
+    lastInboundAt: timestamp('last_inbound_at'),
+    /** Mensajes sin leer por el equipo (señal de "cliente esperando"). */
+    unreadCount: text('unread_count').notNull().default('0'),
+    /** Dueño (GHL userId) + nombre resuelto, si la conversación está asignada. */
+    assignedTo: text('assigned_to'),
+    ownerName: text('owner_name'),
+    /** 'true' si el regex Tier-1 detectó intención de compra. */
+    buyIntent: text('buy_intent').notNull().default('false'),
+    /** Señales de intención detectadas (JSON string[]). */
+    intentSignals: text('intent_signals'),
+    /** 'true' si el contacto ya tiene una oportunidad ABIERTA (lo cubre Live Opp). */
+    hasOpportunity: text('has_opportunity').notNull().default('false'),
+    /** nuevo | descartado | convertido (el equipo lo gestiona desde la UI). */
+    status: text('status').notNull().default('nuevo'),
+    classifiedAt: timestamp('classified_at').defaultNow().notNull(),
+    syncedAt: timestamp('synced_at').defaultNow().notNull(),
+  },
+  (t) => [unique('radar_conv_tenant_conv_unique').on(t.tenantId, t.ghlConversationId)],
+);
+
 export const recommendationEvents = pgTable('recommendation_events', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: text('tenant_id').notNull(),
