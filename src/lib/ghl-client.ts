@@ -553,6 +553,24 @@ export async function addContactTags(
   await ghlPost(`/contacts/${contactId}/tags`, token, { tags });
 }
 
+/** Quita tags de un contacto (DELETE con body, mismo contrato que el add). */
+export async function removeContactTags(
+  { token }: GhlCredentials,
+  contactId: string,
+  tags: string[],
+): Promise<void> {
+  const res = await fetch(`${GHL_BASE}/contacts/${contactId}/tags`, {
+    method: 'DELETE',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tags }),
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`GHL DELETE tags ${res.status}: ${text}`);
+  }
+}
+
 /**
  * Crea una tarea sobre un contacto (seguimiento manual del vendedor).
  * `dueDate` en ISO; por defecto mañana. GHL exige un dueDate.
@@ -580,7 +598,13 @@ export async function createContactTask(
 export async function fetchContactById(
   { token }: GhlCredentials,
   contactId: string,
-): Promise<{ name?: string; email?: string; phone?: string; companyName?: string } | null> {
+): Promise<{
+  name?: string;
+  email?: string;
+  phone?: string;
+  companyName?: string;
+  tags?: string[];
+} | null> {
   const res = await ghlFetch(`/contacts/${contactId}`, token);
   if (!res.ok) return null;
   const data = (await res.json().catch(() => null)) as {
@@ -590,6 +614,7 @@ export async function fetchContactById(
       email?: string;
       phone?: string;
       companyName?: string;
+      tags?: string[];
     };
   } | null;
   const c = data?.contact;
@@ -599,6 +624,7 @@ export async function fetchContactById(
     email: c.email,
     phone: c.phone,
     companyName: c.companyName,
+    tags: c.tags,
   };
 }
 

@@ -5,7 +5,12 @@ import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { decrypt } from '@/lib/encryption';
 import { createOpportunity, fetchFirstStage, type GhlCredentials } from '@/lib/ghl-client';
-import { getRadarLeads, runRadarIngest, setRadarStatus } from '@/lib/radar-store';
+import {
+  getRadarLeads,
+  runRadarClassify,
+  runRadarIngest,
+  setRadarStatus,
+} from '@/lib/radar-store';
 
 /**
  * Radar — API del módulo de conversaciones con intención de compra sin
@@ -55,13 +60,14 @@ export async function POST(request: Request) {
   }
 
   // Refrescar la ingesta on-demand (además del cron). Acotada en páginas y
-  // tiempo para responder rápido: escanea lo más reciente. El cron hace el
-  // barrido profundo.
+  // tiempo para responder rápido: escanea lo más reciente y clasifica un batch
+  // corto con LLM. El cron hace el barrido y drenaje profundos.
   if (action === 'refresh') {
     const result = await runRadarIngest(orgId, t.creds, { maxPages: 15, budgetMs: 40_000 });
     if (result.error) return NextResponse.json({ error: result.error }, { status: 502 });
+    const classify = await runRadarClassify(orgId, t.creds, { batchSize: 10 });
     const leads = await getRadarLeads(orgId);
-    return NextResponse.json({ ok: true, result, leads, total: leads.length });
+    return NextResponse.json({ ok: true, result, classify, leads, total: leads.length });
   }
 
   // Descartar un lead (no es venta).

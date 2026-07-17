@@ -285,6 +285,18 @@ export const radarConversations = pgTable(
     hasOpportunity: text('has_opportunity').notNull().default('false'),
     /** nuevo | descartado | convertido (el equipo lo gestiona desde la UI). */
     status: text('status').notNull().default('nuevo'),
+    // ─── R-2: tenor LLM + reconciliación de tags ───
+    /** ConvTipo del LLM (intencion-compra | soporte | churn | interno | …). */
+    llmTipo: text('llm_tipo'),
+    /** 'true' si el LLM determinó que YA es cliente. */
+    llmEsCliente: text('llm_es_cliente'),
+    /** Confianza 0..1 (texto, consistente con el schema). */
+    llmConfianza: text('llm_confianza'),
+    /** Evidencia/motivo citado por el LLM. */
+    llmMotivo: text('llm_motivo'),
+    llmClassifiedAt: timestamp('llm_classified_at'),
+    /** Bitácora del re-tag autónomo aplicado en GHL (JSON {add,remove,motivo}). */
+    tagChanges: text('tag_changes'),
     classifiedAt: timestamp('classified_at').defaultNow().notNull(),
     syncedAt: timestamp('synced_at').defaultNow().notNull(),
   },
