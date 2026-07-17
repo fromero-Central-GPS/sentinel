@@ -311,6 +311,122 @@ export async function fetchMessagesForContact(
   return fetchConversationMessages(creds, conversationId, limit);
 }
 
+// ─── Conversaciones (Radar) ──────────────────────────────────────────────
+
+/** Una conversación tal como la devuelve `/conversations/search` (campos usados). */
+export interface RawConversation {
+  id: string;
+  contactId?: string;
+  fullName?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string | null;
+  lastMessageBody?: string;
+  lastMessageType?: string;
+  lastMessageDirection?: 'inbound' | 'outbound';
+  lastMessageDate?: number;
+  lastInboundWhatsappMessageDate?: number;
+  unreadCount?: number;
+  assignedTo?: string;
+  /** Cursor de orden que devuelve GHL (para paginar con `startAfterDate`). */
+  sort?: number[];
+}
+
+export interface ConversationPageCursor {
+  startAfterDate?: string;
+}
+
+export interface ConversationPage {
+  conversations: RawConversation[];
+  total: number;
+  next: ConversationPageCursor | null;
+}
+
+/**
+ * Una página de conversaciones de la location, ordenadas por fecha del último
+ * mensaje (desc). Base del Radar: recorre las miles de conversaciones sin traer
+ * cada hilo — `lastMessageBody` y `unreadCount` vienen inline. Pagina con
+ * `startAfterDate` = cursor `sort` de la última conversación.
+ */
+export async function fetchConversationsPage(
+  { token, locationId }: GhlCredentials,
+  cursor?: ConversationPageCursor,
+  limit = 100,
+): Promise<ConversationPage> {
+  const params = new URLSearchParams({
+    locationId,
+    sortBy: 'last_message_date',
+    sort: 'desc',
+    limit: String(limit),
+  });
+  if (cursor?.startAfterDate) params.set('startAfterDate', cursor.startAfterDate);
+
+  const res = await ghlFetch(`/conversations/search?${params.toString()}`, token);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`GHL conversations page ${res.status}: ${text}`);
+  }
+  const data = (await res.json()) as { conversations?: RawConversation[]; total?: number };
+  const conversations = data.conversations ?? [];
+  const last = conversations[conversations.length - 1];
+  const cursorVal = last?.sort?.[0] ?? last?.lastMessageDate;
+  // Hay más páginas si la página vino llena y tenemos un cursor para continuar.
+  const hasNext = conversations.length === limit && cursorVal != null;
+  return {
+    conversations,
+    total: data.total ?? conversations.length,
+    next: hasNext ? { startAfterDate: String(cursorVal) } : null,
+  };
+}
+
+/** Primera etapa de un pipeline (destino por defecto al crear una oportunidad). */
+export async function fetchFirstStage(
+  { token, locationId }: GhlCredentials,
+  pipelineId: string,
+): Promise<{ id: string; name: string } | null> {
+  const res = await ghlFetch(`/opportunities/pipelines?locationId=${locationId}`, token);
+  if (!res.ok) return null;
+  const data = (await res.json().catch(() => null)) as {
+    pipelines?: Array<{ id?: string; stages?: Array<{ id: string; name: string }> }>;
+  } | null;
+  const stage = data?.pipelines?.find((p) => p.id === pipelineId)?.stages?.[0];
+  return stage ? { id: stage.id, name: stage.name } : null;
+}
+
+/**
+ * Crea una oportunidad en GHL (Radar: "Crear oportunidad" desde una conversación
+ * sin registrar). Devuelve el id de la oportunidad creada.
+ */
+export async function createOpportunity(
+  { token, locationId }: GhlCredentials,
+  input: {
+    pipelineId: string;
+    pipelineStageId: string;
+    contactId: string;
+    name: string;
+    monetaryValue?: number;
+    assignedTo?: string;
+  },
+): Promise<{ id: string }> {
+  const body: Record<string, unknown> = {
+    pipelineId: input.pipelineId,
+    locationId,
+    contactId: input.contactId,
+    name: input.name,
+    status: 'open',
+    pipelineStageId: input.pipelineStageId,
+    monetaryValue: input.monetaryValue ?? 0,
+  };
+  if (input.assignedTo) body.assignedTo = input.assignedTo;
+  const data = (await ghlPost('/opportunities/', token, body)) as {
+    opportunity?: { id?: string };
+    id?: string;
+  };
+  const id = data.opportunity?.id ?? data.id;
+  if (!id) throw new Error('GHL no devolvió el id de la oportunidad creada');
+  return { id };
+}
+
 /**
  * Mapa `pipelineStageId → nombre de etapa`. GHL /opportunities/search NO devuelve
  * el nombre de la etapa, solo el id; esto lo resuelve con un único llamado.
