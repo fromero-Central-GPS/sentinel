@@ -92,7 +92,14 @@ export async function runRadarIngest(
         }
         scanned++;
 
-        const { buyIntent, signals } = classifyBuyIntent(c.lastMessageBody);
+        // Intención de compra SOLO si el último mensaje es del CLIENTE (inbound).
+        // Los outbound automáticos (nurture/bot) traen lenguaje de venta de la
+        // plantilla, no del cliente → serían falsos positivos (jul-2026: 146 de
+        // 164 "compra" eran emails de nurture). El texto del bot se ignora.
+        const cls = classifyBuyIntent(c.lastMessageBody);
+        const isInbound = c.lastMessageDirection === 'inbound';
+        const buyIntent = isInbound && cls.buyIntent;
+        const signals = buyIntent ? cls.signals : [];
         const unread = c.unreadCount ?? 0;
         // Solo guardamos lo accionable: intención de compra o cliente esperando.
         if (!buyIntent && unread <= 0) continue;
