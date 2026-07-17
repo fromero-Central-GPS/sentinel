@@ -69,9 +69,10 @@ Open [http://localhost:3000](http://localhost:3000).
 | --------- | ----------- | ----------------------------------- |
 | `dev`     | Preview     | `sentinel-fleet-dev.vercel.app`     |
 | `staging` | Preview     | `sentinel-fleet-staging.vercel.app` |
-| `main`    | Production  | `sentinel-fleet.vercel.app`         |
+| `main`    | Production  | `sentinel.vercel.app`               |
 
-> **Note:** `sentinel*.vercel.app` (dev, staging, prod base) were taken. `sentinel-fleet*` was chosen as the alternative naming — all three variants were verified available as of 2026-06-26.
+> **Note:** `sentinel-fleet.vercel.app` es un alias de dominio no configurado aún en Vercel.
+> Para añadirlo: `vercel domains add sentinel-fleet.vercel.app` (requiere token Válido).
 
 ### Vercel Setup
 
