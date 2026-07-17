@@ -20,8 +20,15 @@ import { classifyBuyIntent } from '@/lib/radar-engine';
 
 /** Días hacia atrás que considera la ingesta (conversaciones más viejas se ignoran). */
 const DEFAULT_LOOKBACK_DAYS = 60;
-/** Tope de páginas por corrida (cota de tiempo serverless; 100 conv/página). */
-const DEFAULT_MAX_PAGES = 60;
+/** Tope de páginas por corrida (cota dura; 100 conv/página). */
+const DEFAULT_MAX_PAGES = 40;
+/**
+ * Presupuesto de tiempo por corrida. La secuencia de nurture deja miles de
+ * conversaciones "recientes", así que el lookback no recorta y el escaneo puede
+ * ser largo; este tope de wall-clock garantiza que la ingesta SIEMPRE retorne
+ * (escribiendo lo que alcanzó) en vez de agotar el límite del serverless.
+ */
+const DEFAULT_BUDGET_MS = 45_000;
 
 export interface RadarIngestResult {
   tenantId: string;
@@ -29,6 +36,7 @@ export interface RadarIngestResult {
   scanned: number; // conversaciones vistas
   candidates: number; // upserteadas (intención o sin leer)
   reachedLookback: boolean;
+  timedOut: boolean; // true si cortó por presupuesto de tiempo
   error?: string;
 }
 
@@ -54,11 +62,12 @@ async function openContactIds(tenantId: string): Promise<Set<string>> {
 export async function runRadarIngest(
   tenantId: string,
   creds: GhlCredentials,
-  opts?: { maxPages?: number; lookbackDays?: number },
+  opts?: { maxPages?: number; lookbackDays?: number; budgetMs?: number },
 ): Promise<RadarIngestResult> {
   const maxPages = opts?.maxPages ?? DEFAULT_MAX_PAGES;
   const lookbackDays = opts?.lookbackDays ?? DEFAULT_LOOKBACK_DAYS;
   const cutoff = Date.now() - lookbackDays * 86_400_000;
+  const deadline = Date.now() + (opts?.budgetMs ?? DEFAULT_BUDGET_MS);
 
   try {
     const [hasOppSet, userMap] = await Promise.all([openContactIds(tenantId), fetchUsers(creds)]);
@@ -68,6 +77,7 @@ export async function runRadarIngest(
     let scanned = 0;
     let candidates = 0;
     let reachedLookback = false;
+    let timedOut = false;
 
     outer: do {
       const page = await fetchConversationsPage(creds, cursor ?? undefined);
@@ -137,9 +147,13 @@ export async function runRadarIngest(
         candidates++;
       }
       cursor = page.next;
+      if (Date.now() >= deadline) {
+        timedOut = true;
+        break;
+      }
     } while (cursor && pages < maxPages);
 
-    return { tenantId, pages, scanned, candidates, reachedLookback };
+    return { tenantId, pages, scanned, candidates, reachedLookback, timedOut };
   } catch (err) {
     return {
       tenantId,
@@ -147,6 +161,7 @@ export async function runRadarIngest(
       scanned: 0,
       candidates: 0,
       reachedLookback: false,
+      timedOut: false,
       error: err instanceof Error ? err.message : String(err),
     };
   }

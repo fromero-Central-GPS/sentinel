@@ -54,9 +54,11 @@ export async function POST(request: Request) {
     );
   }
 
-  // Refrescar la ingesta on-demand (además del cron).
+  // Refrescar la ingesta on-demand (además del cron). Acotada en páginas y
+  // tiempo para responder rápido: escanea lo más reciente. El cron hace el
+  // barrido profundo.
   if (action === 'refresh') {
-    const result = await runRadarIngest(orgId, t.creds);
+    const result = await runRadarIngest(orgId, t.creds, { maxPages: 15, budgetMs: 40_000 });
     if (result.error) return NextResponse.json({ error: result.error }, { status: 502 });
     const leads = await getRadarLeads(orgId);
     return NextResponse.json({ ok: true, result, leads, total: leads.length });
