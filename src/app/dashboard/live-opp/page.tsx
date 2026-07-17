@@ -115,6 +115,8 @@ export default function LiveOppPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'mock'>('live');
+  // Filtro por vendedor (nombre del dueño de la oportunidad). 'all' = todos.
+  const [ownerFilter, setOwnerFilter] = useState<string>('all');
   // Estado de ejecución 1-click por oportunidad (AG-2).
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<Record<string, { ok: boolean; msg: string }>>(
@@ -159,6 +161,8 @@ export default function LiveOppPage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setOwnerFilter('all');
+    setExpandedId(null);
     fetch(`/api/engines/live-opp?mode=${mode}`)
       .then((r) => r.json())
       .then((d: LiveOppData) => {
@@ -212,6 +216,27 @@ export default function LiveOppPage() {
 
   if (!data) return null;
 
+  // Vendedores presentes en los datos + cuántas oportunidades tiene cada uno,
+  // para poblar el filtro. Las opps sin dueño se agrupan bajo '__none__'.
+  const countByOwner = new Map<string, number>();
+  let noOwnerCount = 0;
+  for (const o of data.opportunities) {
+    if (o.owner) countByOwner.set(o.owner, (countByOwner.get(o.owner) ?? 0) + 1);
+    else noOwnerCount++;
+  }
+  const owners = Array.from(countByOwner.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+
+  // Lista filtrada por el vendedor seleccionado. Los KPIs y la tabla se calculan
+  // sobre esta lista, así el filtro refleja la carga real del vendedor.
+  const opportunities =
+    ownerFilter === 'all'
+      ? data.opportunities
+      : ownerFilter === '__none__'
+        ? data.opportunities.filter((o) => !o.owner)
+        : data.opportunities.filter((o) => o.owner === ownerFilter);
+  const kpiValue = opportunities.reduce((acc, o) => acc + o.value, 0);
+  const kpiCritical = opportunities.filter((o) => o.riskLevel === 'critical').length;
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       <div className="flex items-start justify-between">
@@ -229,41 +254,65 @@ export default function LiveOppPage() {
         </button>
       </div>
 
+      {/* Filtro por vendedor */}
+      <div className="flex items-center gap-2">
+        <label htmlFor="owner-filter" className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
+          Vendedor
+        </label>
+        <select
+          id="owner-filter"
+          value={ownerFilter}
+          onChange={(e) => {
+            setOwnerFilter(e.target.value);
+            setExpandedId(null);
+          }}
+          className="text-sm rounded-lg border border-zinc-200 bg-white px-3 py-1.5 hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+        >
+          <option value="all">Todos ({data.opportunities.length})</option>
+          {owners.map((o) => (
+            <option key={o} value={o}>
+              {o} ({countByOwner.get(o)})
+            </option>
+          ))}
+          {noOwnerCount > 0 && <option value="__none__">Sin dueño ({noOwnerCount})</option>}
+        </select>
+      </div>
+
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-5">
           <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">En riesgo</p>
-          <p className="mt-2 text-3xl font-bold text-amber-600">{data.totalAtRisk}</p>
+          <p className="mt-2 text-3xl font-bold text-amber-600">{opportunities.length}</p>
           <p className="mt-1 text-xs text-zinc-500">oportunidades sin actividad ≥7 días</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-5">
           <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
             Valor en riesgo
           </p>
-          <p className="mt-2 text-3xl font-bold text-red-600">{formatCLP(data.totalValue)}</p>
+          <p className="mt-2 text-3xl font-bold text-red-600">{formatCLP(kpiValue)}</p>
           <p className="mt-1 text-xs text-zinc-500">suma de oportunidades en riesgo</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-5">
           <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Críticas</p>
-          <p className="mt-2 text-3xl font-bold text-red-700">
-            {data.opportunities.filter((o) => o.riskLevel === 'critical').length}
-          </p>
+          <p className="mt-2 text-3xl font-bold text-red-700">{kpiCritical}</p>
           <p className="mt-1 text-xs text-zinc-500">sin actividad 21+ días</p>
         </div>
       </div>
 
-      {data.opportunities.length === 0 ? (
+      {opportunities.length === 0 ? (
         <div className="rounded-xl border border-zinc-200 bg-white p-12 flex flex-col items-center text-center">
           <p className="text-green-600 font-semibold text-lg">¡Sin oportunidades en riesgo!</p>
           <p className="text-sm text-zinc-500 mt-1">
-            Todas las oportunidades abiertas tienen actividad reciente.
+            {ownerFilter === 'all'
+              ? 'Todas las oportunidades abiertas tienen actividad reciente.'
+              : 'Este vendedor no tiene oportunidades en riesgo.'}
           </p>
         </div>
       ) : (
         <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
           <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-700">
-              Oportunidades ({data.opportunities.length})
+              Oportunidades ({opportunities.length})
             </h2>
             <p className="text-xs text-zinc-400">Ordenado por riesgo ↓</p>
           </div>
@@ -296,7 +345,7 @@ export default function LiveOppPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {data.opportunities.map((opp) => {
+                {opportunities.map((opp) => {
                   const rc = riskConfig(opp.riskLevel);
                   const isExpanded = expandedId === opp.id;
                   return (
