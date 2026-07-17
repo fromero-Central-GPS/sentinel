@@ -17,6 +17,9 @@ type Lead = {
   buyIntent: boolean;
   intentSignals: string[];
   status: string;
+  llmTipo: string | null;
+  llmMotivo: string | null;
+  llmConfianza: number | null;
 };
 
 type RadarData = { leads: Lead[]; total: number; error?: string };
@@ -289,15 +292,34 @@ export default function RadarPage() {
                         <div className="text-xs text-zinc-400">{timeAgo(lead.lastMessageAt)}</div>
                       </td>
                       <td className="py-3 px-4">
-                        {lead.buyIntent && (
-                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                            compra
-                          </span>
-                        )}
-                        {lead.intentSignals.length > 0 && (
-                          <div className="text-[11px] text-zinc-400 mt-0.5">
-                            {lead.intentSignals.map((s) => s.replaceAll('_', ' ')).join(' · ')}
+                        <div className="flex items-center gap-1.5">
+                          {lead.buyIntent && (
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                              compra
+                            </span>
+                          )}
+                          {lead.llmTipo === 'intencion-compra' && (
+                            <span
+                              className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200"
+                              title={lead.llmMotivo ?? undefined}
+                            >
+                              ✓ IA
+                            </span>
+                          )}
+                        </div>
+                        {lead.llmMotivo ? (
+                          <div
+                            className="text-[11px] text-zinc-400 mt-0.5 max-w-[14rem] truncate"
+                            title={lead.llmMotivo}
+                          >
+                            {lead.llmMotivo}
                           </div>
+                        ) : (
+                          lead.intentSignals.length > 0 && (
+                            <div className="text-[11px] text-zinc-400 mt-0.5">
+                              {lead.intentSignals.map((s) => s.replaceAll('_', ' ')).join(' · ')}
+                            </div>
+                          )
                         )}
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-zinc-700">

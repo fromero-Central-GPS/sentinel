@@ -8,18 +8,35 @@
  * tabla SEA la cola del Radar. Ver docs/radar-conversaciones-propuesta.md.
  */
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { deals, radarConversations } from '@/db/schema';
 import {
+  addContactTags,
+  fetchContactById,
   fetchConversationsPage,
-  fetchUsers,
+  fetchMessagesForContact,
+  fetchUsersDetailed,
+  mapWithConcurrency,
+  removeContactTags,
   type GhlCredentials,
 } from '@/lib/ghl-client';
 import { classifyBuyIntent } from '@/lib/radar-engine';
+import { classifyTenorLLM } from '@/lib/radar-llm';
+import { reconcileTags } from '@/lib/tag-taxonomy';
+import { resolveWorkingAIConfig } from '@/lib/ai-config';
+import { toMessages } from '@/lib/types';
+import type { LLMUsage } from '@/lib/llm';
 
 /** Días hacia atrás que considera la ingesta (conversaciones más viejas se ignoran). */
 const DEFAULT_LOOKBACK_DAYS = 60;
+/**
+ * Recencia de la actividad del CLIENTE: para ser candidato, el último mensaje
+ * entrante debe estar dentro de esta ventana. El nurture automático "bombea"
+ * `lastMessageDate`, así que la recencia real se mide por el inbound (feedback
+ * Francisco jul-2026: aparecían conversaciones cuyo cliente escribió hace meses).
+ */
+const INBOUND_LOOKBACK_DAYS = 45;
 /** Tope de páginas por corrida (cota dura; 100 conv/página). */
 const DEFAULT_MAX_PAGES = 40;
 /**
@@ -69,8 +86,19 @@ export async function runRadarIngest(
   const cutoff = Date.now() - lookbackDays * 86_400_000;
   const deadline = Date.now() + (opts?.budgetMs ?? DEFAULT_BUDGET_MS);
 
+  const inboundCutoff = Date.now() - INBOUND_LOOKBACK_DAYS * 86_400_000;
+
   try {
-    const [hasOppSet, userMap] = await Promise.all([openContactIds(tenantId), fetchUsers(creds)]);
+    const [hasOppSet, users] = await Promise.all([
+      openContactIds(tenantId),
+      fetchUsersDetailed(creds),
+    ]);
+    const userMap: Record<string, string> = {};
+    const internalEmails = new Set<string>();
+    for (const u of users) {
+      userMap[u.id] = u.name;
+      if (u.email) internalEmails.add(u.email.toLowerCase());
+    }
 
     let cursor: { startAfterDate?: string } | null = null;
     let pages = 0;
@@ -91,6 +119,19 @@ export async function runRadarIngest(
           break outer;
         }
         scanned++;
+
+        // Excluir contactos internos (empleados/partners): email del dominio
+        // propio o que coincide con un usuario de GHL (caso Francisca Martel).
+        const email = (c.email ?? '').toLowerCase();
+        if (email && (email.endsWith('@centralgps.cl') || internalEmails.has(email))) continue;
+
+        // Recencia REAL del cliente: su último inbound (WhatsApp o, si el último
+        // mensaje del hilo es entrante, esa fecha). Si el cliente no escribe
+        // hace más de INBOUND_LOOKBACK_DAYS, no es una conversación viva.
+        const lastInbound =
+          c.lastInboundWhatsappMessageDate ??
+          (c.lastMessageDirection === 'inbound' ? c.lastMessageDate : undefined);
+        if (!lastInbound || lastInbound < inboundCutoff) continue;
 
         // Intención de compra SOLO si el último mensaje es del CLIENTE (inbound).
         // Los outbound automáticos (nurture/bot) traen lenguaje de venta de la
@@ -115,9 +156,7 @@ export async function runRadarIngest(
           lastMessageSnippet: (c.lastMessageBody ?? '').slice(0, 280) || null,
           lastMessageDirection: c.lastMessageDirection ?? null,
           lastMessageAt: lastMs ? new Date(lastMs) : null,
-          lastInboundAt: c.lastInboundWhatsappMessageDate
-            ? new Date(c.lastInboundWhatsappMessageDate)
-            : null,
+          lastInboundAt: new Date(lastInbound),
           unreadCount: String(unread),
           assignedTo: c.assignedTo ?? null,
           ownerName: c.assignedTo ? (userMap[c.assignedTo] ?? null) : null,
@@ -174,6 +213,169 @@ export async function runRadarIngest(
   }
 }
 
+// ─── Clasificación LLM del tenor + re-tag autónomo (R-2) ──────────────────
+
+/** Cuántas conversaciones clasifica el LLM por corrida (drena de a poco). */
+const CLASSIFY_BATCH_SIZE = 20;
+/** Concurrencia LLM (mismo criterio que Forense: >2 revienta el gateway). */
+const LLM_CONCURRENCY = 2;
+/** Confianza mínima para aplicar cambios de tags AUTÓNOMAMENTE en GHL. */
+const RETAG_MIN_CONFIDENCE = 0.6;
+
+export interface RadarClassifyResult {
+  tenantId: string;
+  candidates: number;
+  classified: number;
+  /** Filas auto-descartadas del Radar (soporte/postventa/churn/interno/spam/frio). */
+  dismissed: number;
+  /** Contactos cuyos tags se corrigieron en GHL. */
+  retagged: number;
+  usage: LLMUsage;
+  llmError?: string;
+  error?: string;
+}
+
+/**
+ * Clasifica con LLM el TENOR real de las conversaciones pendientes del Radar y
+ * aplica las consecuencias de forma autónoma (decisión Francisco 2026-07-17):
+ *
+ *  - Solo `intencion-compra` permanece como lead del Radar; el resto (soporte,
+ *    postventa, churn, interno, frio, spam) se auto-descarta de la cola.
+ *  - Reconcilia los TAGS del contacto en GHL (`reconcileTags`): p.ej. un
+ *    "prospecto" hablando de fallas de su equipo pasa a `cliente activo` +
+ *    `soporte`. Deja bitácora en `tag_changes`.
+ *
+ * Re-clasifica una fila si llegaron mensajes nuevos (lastMessageAt avanzó).
+ */
+export async function runRadarClassify(
+  tenantId: string,
+  creds: GhlCredentials,
+  opts?: { batchSize?: number },
+): Promise<RadarClassifyResult> {
+  const batchSize = opts?.batchSize ?? CLASSIFY_BATCH_SIZE;
+  const usage: LLMUsage = { inputTokens: 0, outputTokens: 0 };
+  try {
+    const rows = await db
+      .select()
+      .from(radarConversations)
+      .where(
+        and(
+          eq(radarConversations.tenantId, tenantId),
+          eq(radarConversations.status, 'nuevo'),
+          eq(radarConversations.hasOpportunity, 'false'),
+          or(
+            isNull(radarConversations.llmClassifiedAt),
+            lt(radarConversations.llmClassifiedAt, radarConversations.lastMessageAt),
+          ),
+        ),
+      )
+      .orderBy(
+        sql`${radarConversations.buyIntent} desc`,
+        sql`${radarConversations.unreadCount}::int desc`,
+      )
+      .limit(batchSize);
+
+    if (rows.length === 0) {
+      return { tenantId, candidates: 0, classified: 0, dismissed: 0, retagged: 0, usage };
+    }
+
+    // Credenciales LLM verificadas ANTES del batch (lección BYOK jul-2026).
+    const resolved = await resolveWorkingAIConfig(tenantId);
+    if (!resolved.config) {
+      return {
+        tenantId,
+        candidates: rows.length,
+        classified: 0,
+        dismissed: 0,
+        retagged: 0,
+        usage,
+        llmError: resolved.error,
+      };
+    }
+    const aiConfig = resolved.config;
+
+    let classified = 0;
+    let dismissed = 0;
+    let retagged = 0;
+    const errors: string[] = [];
+
+    await mapWithConcurrency(rows, LLM_CONCURRENCY, async (row) => {
+      if (!row.contactId) return;
+      const messages = toMessages(
+        await fetchMessagesForContact(creds, row.contactId).catch(() => []),
+      );
+      const tenor = await classifyTenorLLM(
+        messages,
+        aiConfig,
+        (u) => {
+          usage.inputTokens += u.inputTokens;
+          usage.outputTokens += u.outputTokens;
+        },
+        (m) => errors.push(m),
+      );
+      if (!tenor) return; // nunca cachear el fallback
+
+      const isLead = tenor.tipo === 'intencion-compra' && !tenor.esCliente;
+
+      // Re-tag autónomo en GHL (solo con confianza suficiente).
+      let tagChanges: string | null = null;
+      if (tenor.confianza >= RETAG_MIN_CONFIDENCE) {
+        try {
+          const contact = await fetchContactById(creds, row.contactId);
+          if (contact) {
+            const rec = reconcileTags(contact.tags ?? [], tenor);
+            if (rec.add.length > 0 || rec.remove.length > 0) {
+              if (rec.add.length > 0) await addContactTags(creds, row.contactId, rec.add);
+              if (rec.remove.length > 0) await removeContactTags(creds, row.contactId, rec.remove);
+              tagChanges = JSON.stringify({ add: rec.add, remove: rec.remove, motivo: rec.motivo });
+              retagged++;
+            }
+          }
+        } catch (err) {
+          errors.push(`retag ${row.contactId}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+
+      await db
+        .update(radarConversations)
+        .set({
+          llmTipo: tenor.tipo,
+          llmEsCliente: tenor.esCliente ? 'true' : 'false',
+          llmConfianza: String(tenor.confianza),
+          llmMotivo: tenor.motivo,
+          llmClassifiedAt: new Date(),
+          ...(tagChanges ? { tagChanges } : {}),
+          // Solo la intención de compra de un NO-cliente es un lead del Radar;
+          // el resto sale de la cola de forma autónoma.
+          ...(isLead ? {} : { status: 'descartado' }),
+        })
+        .where(eq(radarConversations.id, row.id));
+      classified++;
+      if (!isLead) dismissed++;
+    });
+
+    return {
+      tenantId,
+      candidates: rows.length,
+      classified,
+      dismissed,
+      retagged,
+      usage,
+      llmError: classified < rows.length ? errors[0] : undefined,
+    };
+  } catch (err) {
+    return {
+      tenantId,
+      candidates: 0,
+      classified: 0,
+      dismissed: 0,
+      retagged: 0,
+      usage,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 // ─── Lectura para la UI ────────────────────────────────────────────────────
 
 export interface RadarLead {
@@ -191,6 +393,10 @@ export interface RadarLead {
   buyIntent: boolean;
   intentSignals: string[];
   status: string;
+  /** Veredicto LLM (R-2), si ya fue clasificada. */
+  llmTipo: string | null;
+  llmMotivo: string | null;
+  llmConfianza: number | null;
 }
 
 /**
@@ -225,6 +431,9 @@ export async function getRadarLeads(tenantId: string): Promise<RadarLead[]> {
     buyIntent: r.buyIntent === 'true',
     intentSignals: safeParseArray(r.intentSignals),
     status: r.status,
+    llmTipo: r.llmTipo,
+    llmMotivo: r.llmMotivo,
+    llmConfianza: r.llmConfianza != null ? Number(r.llmConfianza) : null,
   }));
 
   leads.sort((a, b) => {
