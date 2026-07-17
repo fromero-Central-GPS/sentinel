@@ -153,10 +153,14 @@ conversación, deja el contacto correctamente etiquetado.
 3. **Motor de reconciliación** corre incremental sobre cada conversación clasificada.
 4. **Deprecar** los tags viejos/basura tras verificar el lote.
 
-## 7. Decisiones que necesito de ti
-- ¿OK con el prefijo por dimensión (`ciclo:`, `conv:`, `ind:`…)? Ordena mucho, pero
-  cambia todos los nombres. Alternativa: nombres planos sin prefijo (menos claro).
-- ¿Falta algún **tipo de conversación** o **estado de ciclo** propio de CentralGPS
-  (ej. `licitacion`, `renovacion`, `upsell`)? Vi tags como `licitacion`,
-  `upssell-activo`, `cuenta clave` que podrían ser estados/facetas propias.
-- ¿Qué nivel de autonomía para el re-tag (auto alta-confianza vs siempre pedir OK)?
+## 7. Decisiones (Francisco, 2026-07-17)
+
+1. **Nombres PLANOS, sin prefijo.** La pertenencia a cada dimensión vive en el
+   código (`tag-taxonomy.ts`), no en el nombre. Se reusan los nombres exactos que
+   ya existen (`lead`, `prospecto`, `cliente activo`, `cliente inactivo`,
+   `perdido`, `soporte`, `interno`, `spam`) y se crean solo los que faltan
+   (`ex-cliente`, `descartado`, `intencion-compra`, `postventa`, `churn`).
+2. **Sin estados adicionales** (`licitacion`/`upsell`/`cuenta clave` quedan como
+   facetas existentes, sin tratamiento especial).
+3. **Re-tag AUTÓNOMO**: el motor aplica los cambios de tags directamente
+   (sin pedir OK), dejando bitácora del cambio y motivo.
