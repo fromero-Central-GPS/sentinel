@@ -671,23 +671,6 @@ export async function findColdStage(
   return stage ? { id: stage.id, name: stage.name } : null;
 }
 
-/**
- * Dominio whitelabel del CRM de la location (ej: `crm.centralgps.cl`), para
- * armar deep-links a conversaciones que abran en el dominio donde el equipo ya
- * tiene sesión. `null` si no hay dominio configurado (usar app.gohighlevel.com).
- */
-export async function fetchLocationDomain({
-  token,
-  locationId,
-}: GhlCredentials): Promise<string | null> {
-  const res = await ghlFetch(`/locations/${locationId}`, token);
-  if (!res.ok) return null;
-  const data = (await res.json().catch(() => null)) as {
-    location?: { domain?: string };
-  } | null;
-  return data?.location?.domain || null;
-}
-
 /** Verifica credenciales contra el endpoint de location. */
 export async function verifyLocation({
   token,
