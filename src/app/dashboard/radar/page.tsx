@@ -22,7 +22,14 @@ type Lead = {
   llmConfianza: number | null;
 };
 
-type RadarData = { leads: Lead[]; total: number; error?: string };
+type RadarData = {
+  leads: Lead[];
+  total: number;
+  /** Base del CRM del tenant (dominio whitelabel) para deep-links. */
+  ghlBase?: string | null;
+  ghlLocationId?: string | null;
+  error?: string;
+};
 
 /** "hace 3h" / "hace 12d" desde un ISO. */
 function timeAgo(iso: string | null): string {
@@ -34,10 +41,13 @@ function timeAgo(iso: string | null): string {
   return `hace ${Math.round(hours / 24)}d`;
 }
 
-function waLink(phone: string | null): string | null {
-  if (!phone) return null;
-  const digits = phone.replace(/[^\d]/g, '');
-  return digits ? `https://wa.me/${digits}` : null;
+/**
+ * Deep-link a la conversación en el CRM (GHL): el vendedor responde desde el
+ * inbox con todo el contexto, no desde su WhatsApp personal.
+ */
+function ghlConversationLink(data: RadarData | null, conversationId: string): string | null {
+  if (!data?.ghlBase || !data?.ghlLocationId) return null;
+  return `${data.ghlBase}/v2/location/${data.ghlLocationId}/conversations/all/${conversationId}`;
 }
 
 export default function RadarPage() {
@@ -75,7 +85,7 @@ export default function RadarPage() {
       });
       const d = await r.json();
       if (!r.ok || d.error) throw new Error(d.error ?? 'Error al actualizar');
-      setData({ leads: d.leads, total: d.total });
+      setData({ leads: d.leads, total: d.total, ghlBase: d.ghlBase, ghlLocationId: d.ghlLocationId });
       setOwnerFilter('all');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -272,7 +282,7 @@ export default function RadarPage() {
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {leads.map((lead) => {
-                  const wa = waLink(lead.phone);
+                  const ghlLink = ghlConversationLink(data, lead.conversationId);
                   const res = result[lead.id];
                   return (
                     <tr key={lead.id} className="hover:bg-zinc-50 align-top">
@@ -339,15 +349,15 @@ export default function RadarPage() {
                           </span>
                         ) : (
                           <div className="flex items-center gap-2 justify-end">
-                            {wa && (
+                            {ghlLink && (
                               <a
-                                href={wa}
+                                href={ghlLink}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-xs px-2 py-1 rounded-lg border border-zinc-200 hover:bg-zinc-50"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                WhatsApp
+                                Abrir en GHL
                               </a>
                             )}
                             <button
