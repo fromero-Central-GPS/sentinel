@@ -4,12 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { appSettings } from '@/db/schema';
 import { decrypt } from '@/lib/encryption';
-import {
-  createOpportunity,
-  fetchFirstStage,
-  fetchLocationDomain,
-  type GhlCredentials,
-} from '@/lib/ghl-client';
+import { createOpportunity, fetchFirstStage, type GhlCredentials } from '@/lib/ghl-client';
 import {
   getRadarLeads,
   runRadarClassify,
@@ -37,22 +32,15 @@ async function tenantCreds(
 }
 
 /**
- * Base del CRM del tenant para deep-links a conversaciones. Cachea el dominio
- * whitelabel por tenant (24h) para no llamar a GHL en cada carga de la vista.
+ * Base del app del CRM para deep-links a conversaciones (ej. el whitelabel de
+ * la agencia `https://app.supersonics.one`). OJO: el `domain` que devuelve la
+ * API de locations es el dominio de funnels/sitio (crm.centralgps.cl), NO el
+ * del app — por eso es env de plataforma, no un fetch.
  */
-const crmBaseCache = new Map<string, { base: string; at: number }>();
-const CRM_BASE_TTL_MS = 24 * 3600 * 1000;
-
 async function resolveCrmBase(orgId: string): Promise<{ base: string; locationId: string } | null> {
   const t = await tenantCreds(orgId);
   if (!t) return null;
-  const cached = crmBaseCache.get(orgId);
-  if (cached && Date.now() - cached.at < CRM_BASE_TTL_MS) {
-    return { base: cached.base, locationId: t.creds.locationId };
-  }
-  const domain = await fetchLocationDomain(t.creds).catch(() => null);
-  const base = `https://${domain || 'app.gohighlevel.com'}`;
-  crmBaseCache.set(orgId, { base, at: Date.now() });
+  const base = process.env.GHL_APP_BASE || 'https://app.gohighlevel.com';
   return { base, locationId: t.creds.locationId };
 }
 

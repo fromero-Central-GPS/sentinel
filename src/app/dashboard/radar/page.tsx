@@ -47,7 +47,9 @@ function timeAgo(iso: string | null): string {
  */
 function ghlConversationLink(data: RadarData | null, conversationId: string): string | null {
   if (!data?.ghlBase || !data?.ghlLocationId) return null;
-  return `${data.ghlBase}/v2/location/${data.ghlLocationId}/conversations/all/${conversationId}`;
+  // Formato real (verificado por Francisco):
+  // https://app.supersonics.one/v2/location/{loc}/conversations/conversations/{conv}
+  return `${data.ghlBase}/v2/location/${data.ghlLocationId}/conversations/conversations/${conversationId}`;
 }
 
 export default function RadarPage() {
