@@ -42,14 +42,15 @@ function timeAgo(iso: string | null): string {
 }
 
 /**
- * Deep-link a la conversación en el CRM (GHL): el vendedor responde desde el
- * inbox con todo el contexto, no desde su WhatsApp personal.
+ * Deep-link al PERFIL del contacto en el CRM (GHL): el deep-link directo a la
+ * conversación no funciona en el whitelabel, así que llevamos al contacto
+ * (formato verificado por Francisco), desde donde el vendedor responde con
+ * todo el contexto.
  */
-function ghlConversationLink(data: RadarData | null, conversationId: string): string | null {
-  if (!data?.ghlBase || !data?.ghlLocationId) return null;
-  // Formato real (verificado por Francisco):
-  // https://app.supersonics.one/v2/location/{loc}/conversations/conversations/{conv}
-  return `${data.ghlBase}/v2/location/${data.ghlLocationId}/conversations/conversations/${conversationId}`;
+function ghlContactLink(data: RadarData | null, contactId: string | null): string | null {
+  if (!data?.ghlBase || !data?.ghlLocationId || !contactId) return null;
+  // https://app.supersonics.one/v2/location/{loc}/contacts/detail/{contactId}
+  return `${data.ghlBase}/v2/location/${data.ghlLocationId}/contacts/detail/${contactId}`;
 }
 
 export default function RadarPage() {
@@ -284,7 +285,7 @@ export default function RadarPage() {
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {leads.map((lead) => {
-                  const ghlLink = ghlConversationLink(data, lead.conversationId);
+                  const ghlLink = ghlContactLink(data, lead.contactId);
                   const res = result[lead.id];
                   return (
                     <tr key={lead.id} className="hover:bg-zinc-50 align-top">
