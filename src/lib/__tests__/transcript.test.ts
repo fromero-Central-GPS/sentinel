@@ -82,6 +82,36 @@ describe('buildTranscript', () => {
     expect(t).toContain('omitidos');
   });
 
+  it('ordena cronológicamente aunque el input venga DESC (como GHL)', () => {
+    // GHL entrega los mensajes más nuevo→más viejo. El transcript debe reordenar
+    // ASC para que el rol y el orden lean como la conversación real.
+    const desc = [
+      msg('outbound', 'Te envío la cotización', 'TYPE_WHATSAPP', 2),
+      msg('inbound', 'Hola, me interesa el GPS', 'TYPE_WHATSAPP', 1),
+    ];
+    expect(buildTranscript(desc)).toBe(
+      '[CLIENTE] Hola, me interesa el GPS\n[VENDEDOR] Te envío la cotización',
+    );
+  });
+
+  it('con input DESC conserva el ÚLTIMO mensaje (estado actual) al truncar', () => {
+    // Regresión bug jul-2026: Radar pasaba el DESC crudo; el tail (70%) recaía
+    // sobre la apertura de venta y el churn/soporte final se truncaba.
+    const filler = Array.from({ length: 50 }, (_, i) =>
+      msg('outbound', `Relleno ${i} con bastante texto para ocupar espacio del presupuesto`, 'TYPE_WHATSAPP', i + 1),
+    );
+    // Orden DESC: primero el FINAL (i=60), luego relleno desc, luego el INICIO.
+    const desc = [
+      msg('inbound', 'FINAL: pueden venir a retirar el dispositivo, no seguimos', 'TYPE_WHATSAPP', 60),
+      ...filler.reverse(),
+      msg('inbound', 'INICIO: quiero cotizar 60 equipos GPS', 'TYPE_WHATSAPP', 0),
+    ];
+    const t = buildTranscript(desc, 1500);
+    expect(t).toContain('FINAL: pueden venir a retirar');
+    // El final va después del inicio en el texto (orden cronológico restaurado).
+    expect(t.indexOf('INICIO')).toBeLessThan(t.indexOf('FINAL'));
+  });
+
   it('limpia hilos citados de emails dentro del transcript', () => {
     const email = `Decidimos no continuar por costos.\n\nDe: Ventas <v@x.cl>\nHistoria citada enorme`;
     const t = buildTranscript([msg('inbound', email, 'TYPE_EMAIL', 1)]);

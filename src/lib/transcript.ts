@@ -78,10 +78,18 @@ const TAIL_BUDGET_RATIO = 0.7;
 /**
  * Arma el transcript acotado a `maxChars` priorizando el FINAL de la
  * conversación (donde vive la razón de pérdida/decisión), pero conservando el
- * inicio para contexto. Espera mensajes en orden cronológico ASC.
+ * inicio para contexto.
+ *
+ * Ordena cronológicamente (ASC por `dateAdded`) internamente: GHL entrega los
+ * mensajes en DESC (más nuevo primero) y no todos los callers lo normalizan
+ * (Radar/Forense lo pasaban crudo). Sin este orden, el presupuesto de `tail`
+ * (70%) recaía sobre la APERTURA de la conversación y truncaba el tramo
+ * reciente → el LLM clasificaba por cómo empezó y no por dónde acabó (bug
+ * jul-2026: Radar leía la cotización inicial y perdía el churn/soporte final).
  */
 export function buildTranscript(messages: CanonicalMessage[], maxChars = 6000): string {
-  const lines = messages
+  const lines = [...messages]
+    .sort((a, b) => new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime())
     .filter((m) => !m.messageType?.startsWith('TYPE_ACTIVITY'))
     .map((m) => {
       const body = cleanMessageBody(m);
