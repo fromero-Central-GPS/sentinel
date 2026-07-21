@@ -26,6 +26,7 @@ import {
   mapWithConcurrency,
 } from '@/lib/ghl-client';
 import { toDeal, toMessages } from '@/lib/types';
+import { getSyncedDeals } from '@/lib/deal-sync';
 import { DEFAULT_FIELD_MAP } from '@/lib/won-track-engine';
 import { getTenantThresholds } from '@/lib/won-track-store';
 
@@ -233,52 +234,65 @@ export async function GET(request: Request) {
 
   const creds = { token: decrypt(row.ghlApiToken), locationId: row.ghlLocationId };
 
-  // Fetch open opportunities
-  let rawOpps;
-  try {
-    rawOpps = await fetchOpportunities(creds, 'open', 50);
-  } catch (err) {
-    return NextResponse.json({ error: `GHL error: ${String(err)}` }, { status: 502 });
-  }
-
-  // Restringe al pipeline de ventas configurado del tenant: los pipelines
-  // post-venta (On Boarding, Up Sell…) son negocios ya ganados, no
-  // oportunidades abiertas. Sin pipeline configurado → sin filtro.
-  if (row.ghlSalesPipelineId) {
-    rawOpps = rawOpps.filter((o) => o.pipelineId === row.ghlSalesPipelineId);
+  // Fuente de datos: el funnel completo ya sincronizado en BD (deal-sync).
+  // Antes Live Opp leía en vivo con `fetchOpportunities(..., 50)`: con cientos
+  // de oportunidades abiertas (516 en CentralGPS jul-2026) el search — ordenado
+  // por fecha de creación desc — solo devolvía las 50 más nuevas, dejando ciego
+  // al motor sobre >90% del pipeline (deals de semanas atrás con conversación
+  // viva jamás se analizaban). `getSyncedDeals` ya restringe al pipeline de
+  // ventas del tenant y trae los mensajes sincronizados, sin cap ni rate limit.
+  // Si el tenant nunca sincronizó, caemos al modo legacy (search en vivo, 50).
+  let items: Array<{ deal: Deal; messages: CanonicalMessage[] }> = await getSyncedDeals(
+    orgId,
+    'open',
+  );
+  const usingSynced = items.length > 0;
+  if (!usingSynced) {
+    let rawOpps;
+    try {
+      rawOpps = await fetchOpportunities(creds, 'open', 50);
+    } catch (err) {
+      return NextResponse.json({ error: `GHL error: ${String(err)}` }, { status: 502 });
+    }
+    // Mismo filtro de pipeline de ventas que `getSyncedDeals` aplica internamente
+    // (los pipelines post-venta son negocios ya ganados, no oportunidades vivas).
+    if (row.ghlSalesPipelineId) {
+      rawOpps = rawOpps.filter((o) => o.pipelineId === row.ghlSalesPipelineId);
+    }
+    items = rawOpps.map((opp) => ({ deal: toDeal(opp, 'open'), messages: [] }));
   }
 
   // Check conversation limit before processing
-  const limitCheck = await enforceConversationLimit(rawOpps.length);
+  const limitCheck = await enforceConversationLimit(items.length);
   if (limitCheck.blocked) return limitCheck.response!;
 
   // Usa el blueprint real del tenant (Won Track); si nunca corrió, cae a defaults.
   // En paralelo: mapa de etapas (id→nombre) y de usuarios (id→nombre) para
-  // enriquecer cada oportunidad — GHL search no trae ni el nombre de etapa ni el dueño.
+  // enriquecer cada oportunidad — GHL no persiste ni el nombre de etapa ni el dueño.
   const [thresholds, stageMap, userMap] = await Promise.all([
     getTenantThresholds(orgId).then((t) => t ?? getDefaultThresholds()),
     fetchStageMap(creds),
     fetchUsers(creds),
   ]);
 
-  // Preparamos los deals y traemos los mensajes de TODAS las opps en paralelo.
-  // (Antes solo se pedían las top-25 por valor → el resto quedaba sin actividad y
-  // mostraba el centinela "999d".)
-  const deals = rawOpps.map((opp) => {
-    const deal = toDeal(opp, 'open');
-    // Resuelve el nombre de la etapa (search solo trae el id).
-    deal.pipelineStageName = stageMap[opp.pipelineStageId ?? ''] ?? deal.pipelineStageName;
-    return { opp, deal };
-  });
+  // Resuelve el nombre de la etapa (search/sync solo guardan el id).
+  for (const { deal } of items) {
+    deal.pipelineStageName = stageMap[deal.pipelineStageId ?? ''] ?? deal.pipelineStageName;
+  }
 
-  // Concurrencia acotada para no reventar el rate limit de GHL (429).
-  const messagesByOpp = await mapWithConcurrency(deals, 5, ({ deal }) =>
-    deal.contactId
-      ? fetchMessagesForContact(creds, deal.contactId)
-          .then(toMessages)
-          .catch(() => [])
-      : Promise.resolve([]),
-  );
+  // Modo legacy: los mensajes no vienen con el deal, se traen de GHL con
+  // concurrencia acotada para no reventar el rate limit (429). En modo
+  // sincronizado ya llegan desde `deal_messages`.
+  if (!usingSynced) {
+    const fetched = await mapWithConcurrency(items, 5, ({ deal }) =>
+      deal.contactId
+        ? fetchMessagesForContact(creds, deal.contactId)
+            .then(toMessages)
+            .catch(() => [])
+        : Promise.resolve([]),
+    );
+    items = items.map((it, i) => ({ deal: it.deal, messages: fetched[i] }));
+  }
 
   // Última acción ejecutada por el agente por deal (bitácora AG-2), para el
   // resumen "qué se ha hecho". Una consulta por request.
@@ -304,12 +318,11 @@ export async function GET(request: Request) {
   // Primero determinamos las opps en riesgo; después completamos el contacto
   // de las que vienen sin email/teléfono (el search de oportunidades no los
   // trae) y recién ahí armamos el resumen.
-  const atRisk = deals
-    .map(({ opp, deal }, i) => ({
-      opp,
+  const atRisk = items
+    .map(({ deal, messages }) => ({
       deal,
-      messages: messagesByOpp[i],
-      analysis: analyzeLiveOpportunity(deal, messagesByOpp[i], thresholds),
+      messages,
+      analysis: analyzeLiveOpportunity(deal, messages, thresholds),
     }))
     .filter((x) => x.analysis.riskLevel !== 'none');
 
@@ -325,17 +338,17 @@ export async function GET(request: Request) {
     }
   });
 
-  const analyzedOpps = atRisk.map(({ opp, deal, messages, analysis }) => {
+  const analyzedOpps = atRisk.map(({ deal, messages, analysis }) => {
     // "Comentarios" (custom field de la oportunidad) = lo que el cliente cotiza.
     const comentarios =
-      opp.customFields
+      deal.customFields
         ?.find((f) => f.id === DEFAULT_FIELD_MAP.comentarios)
         ?.fieldValueString?.trim() || '';
     const playbook = playbookForUi(deal, messages, analysis);
     return {
       analysis,
       // Nombre del deal (ej "Plan Lite Anual x2 | TRANSMACO"), aparte del contacto.
-      opportunityName: opp.name ?? deal.name ?? '',
+      opportunityName: deal.name ?? '',
       comentarios,
       owner: deal.assignedTo ? (userMap[deal.assignedTo] ?? null) : null,
       createdAt: deal.createdAt,
@@ -367,7 +380,7 @@ export async function GET(request: Request) {
     .sort((a, b) => b.riskScore - a.riskScore);
 
   // Track usage
-  await incrementUsage('liveOpp', rawOpps.length);
+  await incrementUsage('liveOpp', items.length);
 
   return NextResponse.json({
     totalAtRisk: mappedOpps.length,
