@@ -22,6 +22,7 @@ const schema = z.object({
   esCliente: z.boolean(),
   confianza: z.number().min(0).max(1),
   motivo: z.string(),
+  resumen: z.string(),
 });
 
 export type TenorResult = z.infer<typeof schema>;
@@ -51,7 +52,14 @@ Reglas:
   factura/renovación es postventa. El tenor lo define dónde ACABA la
   conversación, no cómo empezó.
 - "motivo": una frase en español citando la evidencia clave (idealmente del tramo final).
-- "confianza": 0=nula, 1=inequívoca.`;
+- "confianza": 0=nula, 1=inequívoca.
+- "resumen": resumen comercial de 1-2 frases enfocado en EL NEGOCIO, para que un
+  vendedor sepa de qué va la conversación sin leerla. Prioriza, si aparecen:
+  qué servicio/producto quiere (GPS, telemetría, tacógrafo, cámaras…), cuántos
+  vehículos/equipos cotiza, tipo de flota, y en qué etapa está (recién consulta,
+  pidió precio, evalúa propuesta, listo para cerrar). Si no es una venta, resume
+  igual el asunto real (p.ej. "cliente reporta que 2 equipos no reportan"). Sé
+  concreto y breve; nada de relleno. En español neutro.`;
 
 /**
  * Clasifica el tenor de la conversación. `null` si no hay texto o el LLM no

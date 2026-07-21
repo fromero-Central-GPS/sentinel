@@ -20,6 +20,7 @@ type Lead = {
   llmTipo: string | null;
   llmMotivo: string | null;
   llmConfianza: number | null;
+  llmResumen: string | null;
 };
 
 type RadarData = {
@@ -269,7 +270,7 @@ export default function RadarPage() {
                     Contacto
                   </th>
                   <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">
-                    Último mensaje
+                    Resumen
                   </th>
                   <th className="py-2 px-4 text-xs font-medium text-zinc-500 uppercase tracking-wide">
                     Señal
@@ -297,12 +298,29 @@ export default function RadarPage() {
                           <div className="text-xs text-zinc-400 font-mono">{lead.phone}</div>
                         )}
                       </td>
-                      <td className="py-3 px-4 max-w-[24rem]">
-                        <div className="text-sm text-zinc-700 truncate" title={lead.lastMessageSnippet ?? ''}>
-                          {lead.lastMessageDirection === 'inbound' ? '↙ ' : '↗ '}
-                          {lead.lastMessageSnippet || '—'}
+                      <td className="py-3 px-4 max-w-[26rem]">
+                        {lead.llmResumen ? (
+                          <div className="text-sm text-zinc-800" title={lead.llmResumen}>
+                            {lead.llmResumen}
+                          </div>
+                        ) : (
+                          <div
+                            className="text-sm text-zinc-700 truncate"
+                            title={lead.lastMessageSnippet ?? ''}
+                          >
+                            {lead.lastMessageDirection === 'inbound' ? '↙ ' : '↗ '}
+                            {lead.lastMessageSnippet || '—'}
+                          </div>
+                        )}
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-400">
+                          <span>{timeAgo(lead.lastMessageAt)}</span>
+                          {lead.llmResumen && lead.lastMessageSnippet && (
+                            <span className="truncate max-w-[16rem]" title={lead.lastMessageSnippet}>
+                              · {lead.lastMessageDirection === 'inbound' ? '↙' : '↗'}{' '}
+                              {lead.lastMessageSnippet}
+                            </span>
+                          )}
                         </div>
-                        <div className="text-xs text-zinc-400">{timeAgo(lead.lastMessageAt)}</div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1.5">
