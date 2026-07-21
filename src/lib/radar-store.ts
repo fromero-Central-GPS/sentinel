@@ -266,6 +266,8 @@ export async function runRadarClassify(
           or(
             isNull(radarConversations.llmClassifiedAt),
             lt(radarConversations.llmClassifiedAt, radarConversations.lastMessageAt),
+            // Backfill: leads ya clasificados antes de existir el resumen comercial.
+            isNull(radarConversations.llmResumen),
           ),
         ),
       )
@@ -343,6 +345,7 @@ export async function runRadarClassify(
           llmEsCliente: tenor.esCliente ? 'true' : 'false',
           llmConfianza: String(tenor.confianza),
           llmMotivo: tenor.motivo,
+          llmResumen: tenor.resumen,
           llmClassifiedAt: new Date(),
           ...(tagChanges ? { tagChanges } : {}),
           // Solo la intención de compra de un NO-cliente es un lead del Radar;
@@ -397,6 +400,8 @@ export interface RadarLead {
   llmTipo: string | null;
   llmMotivo: string | null;
   llmConfianza: number | null;
+  /** Resumen comercial del hilo (servicio, nº de vehículos, etapa). */
+  llmResumen: string | null;
 }
 
 /**
@@ -434,6 +439,7 @@ export async function getRadarLeads(tenantId: string): Promise<RadarLead[]> {
     llmTipo: r.llmTipo,
     llmMotivo: r.llmMotivo,
     llmConfianza: r.llmConfianza != null ? Number(r.llmConfianza) : null,
+    llmResumen: r.llmResumen,
   }));
 
   leads.sort((a, b) => {

@@ -294,6 +294,8 @@ export const radarConversations = pgTable(
     llmConfianza: text('llm_confianza'),
     /** Evidencia/motivo citado por el LLM. */
     llmMotivo: text('llm_motivo'),
+    /** Resumen comercial del hilo (servicio, nº de vehículos, etapa) para la UI. */
+    llmResumen: text('llm_resumen'),
     llmClassifiedAt: timestamp('llm_classified_at'),
     /** Bitácora del re-tag autónomo aplicado en GHL (JSON {add,remove,motivo}). */
     tagChanges: text('tag_changes'),
