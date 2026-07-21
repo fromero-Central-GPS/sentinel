@@ -44,7 +44,13 @@ OJO: pedir soporte/renovación/baja implica que es cliente. Pedir una cotizació
 
 Reglas:
 - Júzgalo por lo que dice el CLIENTE, no por los mensajes automáticos del equipo/bot.
-- "motivo": una frase en español citando la evidencia clave.
+- CLASIFICA POR EL ESTADO ACTUAL: pesa los ÚLTIMOS mensajes del cliente. Muchas
+  conversaciones ABREN pidiendo cotización y luego DERIVAN. Si el hilo termina en
+  "retiren el equipo / desinstalen el demo / demos de baja" es churn; si termina
+  pidiendo ayuda técnica (no reporta, no prende, falla) es soporte; si termina en
+  factura/renovación es postventa. El tenor lo define dónde ACABA la
+  conversación, no cómo empezó.
+- "motivo": una frase en español citando la evidencia clave (idealmente del tramo final).
 - "confianza": 0=nula, 1=inequívoca.`;
 
 /**
