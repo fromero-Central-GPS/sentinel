@@ -21,6 +21,7 @@ import {
   removeContactTags,
   type GhlCredentials,
 } from '@/lib/ghl-client';
+import { assembleContactContext, renderContactContextForLLM } from '@/lib/contact-context';
 import { classifyBuyIntent } from '@/lib/radar-engine';
 import { classifyTenorLLM } from '@/lib/radar-llm';
 import { reconcileTags } from '@/lib/tag-taxonomy';
@@ -306,6 +307,10 @@ export async function runRadarClassify(
       const messages = toMessages(
         await fetchMessagesForContact(creds, row.contactId).catch(() => []),
       );
+      // Tercera capa (campos AI + notas del contacto) como contexto extra del
+      // clasificador. Complementa la conversación, no la reemplaza.
+      const contactContext = await assembleContactContext(creds, row.contactId).catch(() => null);
+      const extraContext = contactContext ? renderContactContextForLLM(contactContext) : '';
       const tenor = await classifyTenorLLM(
         messages,
         aiConfig,
@@ -314,6 +319,7 @@ export async function runRadarClassify(
           usage.outputTokens += u.outputTokens;
         },
         (m) => errors.push(m),
+        extraContext,
       );
       if (!tenor) return; // nunca cachear el fallback
 

@@ -70,13 +70,21 @@ export async function classifyTenorLLM(
   auth?: LLMAuth,
   onUsage?: (usage: LLMUsage) => void,
   onError?: (message: string) => void,
+  /**
+   * Tercera capa de contexto (campos AI + notas del contacto), ya renderizada.
+   * La conversación manda; esto solo complementa. Ver `contact-context.ts`.
+   */
+  extraContext?: string,
 ): Promise<TenorResult | null> {
   const transcript = buildTranscript(messages, 5000);
   if (transcript.length === 0) return null;
+  const context = extraContext?.trim()
+    ? `Contexto adicional del contacto (complementario, la conversación manda):\n\n${extraContext.trim()}\n\n`
+    : '';
   return generateStructured({
     schema,
     system: SYSTEM,
-    prompt: `Conversación:\n\n${transcript}`,
+    prompt: `${context}Conversación:\n\n${transcript}`,
     model: auth?.model,
     attribution: auth?.attribution,
     onUsage,

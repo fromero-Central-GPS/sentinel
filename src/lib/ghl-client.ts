@@ -604,6 +604,8 @@ export async function fetchContactById(
   phone?: string;
   companyName?: string;
   tags?: string[];
+  /** Custom fields del CONTACTO (id → valor). Los "AI" los llena el agente. */
+  customFields?: RawContactCustomFieldValue[];
 } | null> {
   const res = await ghlFetch(`/contacts/${contactId}`, token);
   if (!res.ok) return null;
@@ -615,6 +617,7 @@ export async function fetchContactById(
       phone?: string;
       companyName?: string;
       tags?: string[];
+      customFields?: RawContactCustomFieldValue[];
     };
   } | null;
   const c = data?.contact;
@@ -625,7 +628,102 @@ export async function fetchContactById(
     phone: c.phone,
     companyName: c.companyName,
     tags: c.tags,
+    customFields: c.customFields,
   };
+}
+
+/** Valor crudo de un custom field de contacto tal como lo devuelve GHL. */
+export interface RawContactCustomFieldValue {
+  id: string;
+  /** GHL lo devuelve como string, número o arreglo según el tipo de campo. */
+  value?: string | number | boolean | string[];
+}
+
+/** Una nota de contacto (bitácora libre en GHL). */
+export interface RawContactNote {
+  id: string;
+  body: string;
+  createdAt?: string;
+  createdBy?: string;
+}
+
+/**
+ * Trae las notas de un contacto (más recientes primero). Tercera capa de
+ * contexto para el agente: texto libre que hoy escriben personas y mañana
+ * escribirá el agente. Devuelve [] ante error controlado.
+ */
+export async function fetchContactNotes(
+  { token }: GhlCredentials,
+  contactId: string,
+): Promise<RawContactNote[]> {
+  const res = await ghlFetch(`/contacts/${contactId}/notes`, token);
+  if (!res.ok) return [];
+  const data = (await res.json().catch(() => null)) as {
+    notes?: Array<{ id: string; body?: string; dateAdded?: string; createdBy?: string }>;
+  } | null;
+  const list = data?.notes ?? [];
+  return list
+    .map((n) => ({
+      id: n.id,
+      body: (n.body ?? '').trim(),
+      createdAt: n.dateAdded,
+      createdBy: n.createdBy,
+    }))
+    .filter((n) => n.body.length > 0)
+    .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+}
+
+/** Definición de un custom field de la location (resuelve id → nombre/clave/tipo). */
+export interface ContactCustomFieldDef {
+  id: string;
+  name: string;
+  fieldKey: string;
+  dataType: string;
+}
+
+// Las definiciones de campos cambian rara vez; se cachean por location para no
+// pegarle a GHL en cada request (el join id→nombre lo necesitan ambos motores).
+const CUSTOM_FIELD_DEF_TTL_MS = 10 * 60 * 1000;
+const customFieldDefCache = new Map<
+  string,
+  { at: number; defs: Map<string, ContactCustomFieldDef> }
+>();
+
+/**
+ * Definiciones de custom fields del modelo `contact` de una location, indexadas
+ * por id. Cacheadas 10 min. Devuelve un Map vacío ante error controlado.
+ */
+export async function fetchContactCustomFieldDefs({
+  token,
+  locationId,
+}: GhlCredentials): Promise<Map<string, ContactCustomFieldDef>> {
+  const cached = customFieldDefCache.get(locationId);
+  if (cached && Date.now() - cached.at < CUSTOM_FIELD_DEF_TTL_MS) return cached.defs;
+
+  const res = await ghlFetch(`/locations/${locationId}/customFields?model=contact`, token);
+  const defs = new Map<string, ContactCustomFieldDef>();
+  if (res.ok) {
+    const data = (await res.json().catch(() => null)) as {
+      customFields?: Array<{
+        id: string;
+        name?: string;
+        fieldKey?: string;
+        dataType?: string;
+        model?: string;
+      }>;
+    } | null;
+    for (const f of data?.customFields ?? []) {
+      if (f.model && f.model !== 'contact') continue;
+      defs.set(f.id, {
+        id: f.id,
+        name: f.name ?? f.fieldKey ?? f.id,
+        fieldKey: f.fieldKey ?? '',
+        dataType: f.dataType ?? '',
+      });
+    }
+  }
+  customFieldDefCache.set(locationId, { at: Date.now(), defs });
+  return defs;
 }
 
 /**

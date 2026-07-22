@@ -25,6 +25,7 @@ import {
   fetchUsers,
   mapWithConcurrency,
 } from '@/lib/ghl-client';
+import { assembleContactContext, type ContactContext } from '@/lib/contact-context';
 import { toDeal, toMessages } from '@/lib/types';
 import { getSyncedDeals } from '@/lib/deal-sync';
 import { DEFAULT_FIELD_MAP } from '@/lib/won-track-engine';
@@ -338,6 +339,19 @@ export async function GET(request: Request) {
     }
   });
 
+  // Tercera capa: campos AI + notas del contacto (los que el agente irá
+  // completando). Solo para las opps en riesgo (las que se muestran), con
+  // concurrencia acotada para respetar el rate limit de GHL. Es contexto
+  // complementario: si falla, la opp igual se muestra sin esta capa.
+  const contextByDeal = new Map<string, ContactContext>();
+  await mapWithConcurrency(atRisk, 5, async (x) => {
+    if (!x.deal.contactId) return;
+    const ctx = await assembleContactContext(creds, x.deal.contactId).catch(() => null);
+    if (ctx && (ctx.fields.length > 0 || ctx.notes.length > 0)) {
+      contextByDeal.set(x.deal.id, ctx);
+    }
+  });
+
   const analyzedOpps = atRisk.map(({ deal, messages, analysis }) => {
     // "Comentarios" (custom field de la oportunidad) = lo que el cliente cotiza.
     const comentarios =
@@ -354,11 +368,12 @@ export async function GET(request: Request) {
       createdAt: deal.createdAt,
       playbook,
       resumen: resumenForUi(deal, messages, analysis, playbook, lastActionByDeal.get(deal.id) ?? null),
+      contactContext: contextByDeal.get(deal.id) ?? null,
     };
   });
 
   const mappedOpps = analyzedOpps
-    .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook, resumen }) => ({
+    .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook, resumen, contactContext }) => ({
       id: a.opportunityId,
       name: a.contactName || a.opportunityId,
       opportunityName,
@@ -376,6 +391,7 @@ export async function GET(request: Request) {
       recommendedActions: a.recommendedActions.slice(0, 3),
       playbook,
       resumen,
+      contactContext,
     }))
     .sort((a, b) => b.riskScore - a.riskScore);
 
