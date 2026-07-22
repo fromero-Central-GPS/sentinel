@@ -389,7 +389,15 @@ export default function RadarPage() {
                               {busy === lead.id ? '…' : 'Crear oportunidad'}
                             </button>
                             <button
-                              onClick={() => act(lead, 'dismiss')}
+                              onClick={() => {
+                                // Confirmación: descartar saca el lead de la cola y no
+                                // hay "deshacer" en la UI (feedback Francisco jul-2026:
+                                // se descartaron por error al errarle al botón).
+                                const quien = lead.contactName?.trim() || 'esta conversación';
+                                if (window.confirm(`¿Descartar a ${quien}? Saldrá del Radar.`)) {
+                                  act(lead, 'dismiss');
+                                }
+                              }}
                               disabled={busy === lead.id}
                               className="text-xs px-2 py-1 rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 disabled:opacity-50"
                             >
