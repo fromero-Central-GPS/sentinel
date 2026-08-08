@@ -45,6 +45,9 @@ function playbookForUi(deal: Deal, messages: CanonicalMessage[], analysis: LiveO
     executable: EXECUTABLE_ACTIONS.includes(d.action),
     contactId: deal.contactId,
     pipelineId: deal.pipelineId,
+    // Ejecutivo asignado: el botón lo manda para que el aviso sea un comentario
+    // interno arrobándolo (notificación inmediata) en vez de una tarea.
+    assignedUserId: deal.assignedTo ?? null,
     attempts: d.attempts,
     daysInStage: d.daysInStage,
   };
@@ -214,6 +217,9 @@ export async function GET(request: Request) {
       totalAtRisk: mappedOpps.length,
       totalValue: mappedOpps.reduce((acc, curr) => acc + curr.value, 0),
       opportunities: mappedOpps,
+      // En mock no hay location real: sin link a GHL (los contactId son ficticios).
+      ghlBase: null,
+      ghlLocationId: null,
     });
   }
 
@@ -402,6 +408,12 @@ export async function GET(request: Request) {
     totalAtRisk: mappedOpps.length,
     totalValue: mappedOpps.reduce((acc, curr) => acc + curr.value, 0),
     opportunities: mappedOpps,
+    // Deep-link al contacto en GHL (mismo patrón que Radar). La UI arma:
+    // `${ghlBase}/v2/location/${ghlLocationId}/contacts/detail/${contactId}`.
+    // `GHL_APP_BASE` es el app del CRM (whitelabel de la agencia), no el domain
+    // de funnels que devuelve la API de locations.
+    ghlBase: process.env.GHL_APP_BASE || 'https://app.gohighlevel.com',
+    ghlLocationId: row.ghlLocationId,
     _meta: { mode: 'live' },
   });
 }

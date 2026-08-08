@@ -10,6 +10,7 @@ type Playbook = {
   executable: boolean;
   contactId: string;
   pipelineId?: string;
+  assignedUserId?: string | null;
   attempts: number;
   daysInStage: number;
 };
@@ -69,8 +70,19 @@ type LiveOppData = {
   totalAtRisk: number;
   totalValue: number;
   opportunities: Opportunity[];
+  ghlBase?: string | null;
+  ghlLocationId?: string | null;
   error?: string;
 };
+
+/**
+ * Deep-link al contacto en GHL (mismo patrón que Radar). El contactId vive en
+ * `opp.playbook.contactId` (opp.id es el id de la oportunidad, no del contacto).
+ */
+function ghlContactLink(data: LiveOppData | null, contactId?: string | null): string | null {
+  if (!data?.ghlBase || !data?.ghlLocationId || !contactId) return null;
+  return `${data.ghlBase}/v2/location/${data.ghlLocationId}/contacts/detail/${contactId}`;
+}
 
 function formatCLP(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
@@ -140,13 +152,26 @@ export default function LiveOppPage() {
           rationale: pb.rationale,
           taskDueInDays: pb.taskDueInDays,
           value: opp.value,
+          // Para que el aviso al vendedor sea un comentario interno arrobándolo.
+          assignedUserId: pb.assignedUserId,
+          assignedUserName: opp.owner,
         }),
       });
       const d = await res.json();
       if (!res.ok || d.error) throw new Error(d.detail ? `${d.error} — ${d.detail}` : d.error);
+      // Si el aviso se cursó como comentario interno, GHL notificó al ejecutivo;
+      // si cayó a tarea (sin conversación/dueño), lo indicamos.
+      const notified =
+        (pb.action === 'escalar_a_humano' || pb.action === 'crear_tarea_vendedor') &&
+        d.ghlRefs?.internalCommentId;
+      const detail = notified
+        ? 'comentario interno arrobando al ejecutivo (notificado)'
+        : d.ghlRefs?.taskId
+          ? 'tarea creada en GHL'
+          : 'nota [AGENTE] en GHL';
       setActionResult((prev) => ({
         ...prev,
-        [opp.id]: { ok: true, msg: `${pb.label}: ejecutado (con nota [AGENTE] en GHL).` },
+        [opp.id]: { ok: true, msg: `${pb.label}: ejecutado (${detail}).` },
       }));
     } catch (e) {
       setActionResult((prev) => ({
@@ -348,6 +373,7 @@ export default function LiveOppPage() {
                 {opportunities.map((opp) => {
                   const rc = riskConfig(opp.riskLevel);
                   const isExpanded = expandedId === opp.id;
+                  const ghlLink = ghlContactLink(data, opp.playbook?.contactId);
                   return (
                     <Fragment key={opp.id}>
                       <tr
@@ -368,6 +394,17 @@ export default function LiveOppPage() {
                             >
                               {opp.comentarios}
                             </div>
+                          )}
+                          {ghlLink && (
+                            <a
+                              href={ghlLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 mt-1 text-xs text-indigo-600 hover:text-indigo-700 hover:underline"
+                            >
+                              Abrir contacto en GHL ↗
+                            </a>
                           )}
                         </td>
                         <td className="py-3 px-4">

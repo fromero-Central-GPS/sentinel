@@ -11,9 +11,12 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { agentActions, dealOwnership } from '@/db/schema';
 import {
+  buildUserMention,
   createContactNote,
   createContactTask,
+  fetchConversationIdByContact,
   findColdStage,
+  sendInternalComment,
   updateOpportunityStage,
   type GhlCredentials,
 } from './ghl-client';
@@ -32,6 +35,15 @@ export interface AgentActionRequest {
   rationale?: string;
   taskDueInDays?: number;
   value?: number;
+  /**
+   * Ejecutivo asignado a la oportunidad (userId de GHL) y su nombre. Cuando
+   * viene, las acciones de aviso al vendedor (`escalar_a_humano` /
+   * `crear_tarea_vendedor`) publican un comentario interno arrobándolo — dispara
+   * notificación in-app inmediata, en vez de crear una tarea (panel poco visto).
+   * Sin `assignedUserId` (o sin conversación) se cae a la tarea de siempre.
+   */
+  assignedUserId?: string | null;
+  assignedUserName?: string | null;
 }
 
 export interface ExecuteMeta {
@@ -61,13 +73,31 @@ export async function executeAgentAction(
   try {
     if (req.action === 'crear_tarea_vendedor' || req.action === 'escalar_a_humano') {
       const urgent = req.action === 'escalar_a_humano';
-      const dueDays = urgent ? 1 : (req.taskDueInDays ?? 7);
-      const task = await createContactTask(creds, req.contactId, {
-        title: urgent ? `⚠️ Atender ahora${name}` : `Seguimiento pendiente${name}`,
-        body: rationale,
-        dueDate: new Date(Date.now() + dueDays * 24 * 3600 * 1000).toISOString(),
-      });
-      ghlRefs.taskId = task.id;
+      // Preferimos avisar al ejecutivo con un comentario interno arrobándolo
+      // (notificación inmediata en la bandeja). Requiere un usuario asignado y
+      // una conversación existente; si falta cualquiera, se cae a la tarea.
+      const conversationId = req.assignedUserId
+        ? await fetchConversationIdByContact(creds, req.contactId).catch(() => null)
+        : null;
+      if (req.assignedUserId && conversationId) {
+        const mention = buildUserMention(req.assignedUserName, req.assignedUserId);
+        const prefix = urgent ? '⚠️ Responder ahora' : 'Seguimiento pendiente';
+        const comment = await sendInternalComment(creds, {
+          contactId: req.contactId,
+          conversationId,
+          message: `${prefix}${name}: ${rationale} ${mention}`,
+          mentions: [req.assignedUserId],
+        });
+        ghlRefs.internalCommentId = comment.id ?? 'sent';
+      } else {
+        const dueDays = urgent ? 1 : (req.taskDueInDays ?? 7);
+        const task = await createContactTask(creds, req.contactId, {
+          title: urgent ? `⚠️ Atender ahora${name}` : `Seguimiento pendiente${name}`,
+          body: rationale,
+          dueDate: new Date(Date.now() + dueDays * 24 * 3600 * 1000).toISOString(),
+        });
+        ghlRefs.taskId = task.id;
+      }
     } else if (req.action === 'mover_a_frio') {
       const pipelineId = req.pipelineId ?? salesPipelineId;
       if (!pipelineId) {

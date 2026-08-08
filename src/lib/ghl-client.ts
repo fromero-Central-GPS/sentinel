@@ -727,6 +727,41 @@ export async function fetchContactCustomFieldDefs({
 }
 
 /**
+ * Token de mención de un usuario dentro de un comentario interno. GHL lo
+ * reconoce por la sintaxis `@nombre<userId>ID</userId>` en el cuerpo del mensaje;
+ * el id además debe ir en el array `mentions` del request (ver `sendInternalComment`).
+ */
+export function buildUserMention(name: string | null | undefined, userId: string): string {
+  return `@${name?.trim() || 'ejecutivo'}<userId>${userId}</userId>`;
+}
+
+/**
+ * Publica un comentario interno en la conversación del contacto (no le llega al
+ * cliente). Con `mentions` (ids de usuario) GHL dispara la notificación in-app
+ * inmediata al ejecutivo mencionado — el equivalente por API a arrobar a alguien
+ * en la bandeja. El texto debe incluir el token `buildUserMention` por cada id.
+ */
+export async function sendInternalComment(
+  { token }: GhlCredentials,
+  {
+    contactId,
+    conversationId,
+    message,
+    mentions = [],
+  }: { contactId: string; conversationId?: string; message: string; mentions?: string[] },
+): Promise<{ id?: string }> {
+  const body: Record<string, unknown> = { type: 'InternalComment', contactId, message };
+  if (conversationId) body.conversationId = conversationId;
+  if (mentions.length > 0) body.mentions = mentions;
+  const result = (await ghlPost('/conversations/messages', token, body)) as {
+    messageId?: string;
+    id?: string;
+    conversationId?: string;
+  };
+  return { id: result.messageId ?? result.id };
+}
+
+/**
  * Crea una nota sobre un contacto. El agente la usa como bitácora visible en
  * GHL (`[AGENTE] fecha — acción — detalle`), doc agente-vendedor §7.
  */
