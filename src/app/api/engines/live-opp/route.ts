@@ -21,6 +21,7 @@ import {
   fetchContactById,
   fetchOpportunities,
   fetchMessagesForContact,
+  fetchPipelineStages,
   fetchStageMap,
   fetchUsers,
   mapWithConcurrency,
@@ -276,10 +277,11 @@ export async function GET(request: Request) {
   // Usa el blueprint real del tenant (Won Track); si nunca corrió, cae a defaults.
   // En paralelo: mapa de etapas (id→nombre) y de usuarios (id→nombre) para
   // enriquecer cada oportunidad — GHL no persiste ni el nombre de etapa ni el dueño.
-  const [thresholds, stageMap, userMap] = await Promise.all([
+  const [thresholds, stageMap, userMap, pipelineStages] = await Promise.all([
     getTenantThresholds(orgId).then((t) => t ?? getDefaultThresholds()),
     fetchStageMap(creds),
     fetchUsers(creds),
+    fetchPipelineStages(creds),
   ]);
 
   // Resuelve el nombre de la etapa (search/sync solo guardan el id).
@@ -375,11 +377,14 @@ export async function GET(request: Request) {
       playbook,
       resumen: resumenForUi(deal, messages, analysis, playbook, lastActionByDeal.get(deal.id) ?? null),
       contactContext: contextByDeal.get(deal.id) ?? null,
+      // Para el cambio manual de etapa: etapa actual + opciones del pipeline.
+      currentStageId: deal.pipelineStageId ?? null,
+      stageOptions: deal.pipelineId ? (pipelineStages[deal.pipelineId] ?? []) : [],
     };
   });
 
   const mappedOpps = analyzedOpps
-    .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook, resumen, contactContext }) => ({
+    .map(({ analysis: a, opportunityName, comentarios, owner, createdAt, playbook, resumen, contactContext, currentStageId, stageOptions }) => ({
       id: a.opportunityId,
       name: a.contactName || a.opportunityId,
       opportunityName,
@@ -398,6 +403,8 @@ export async function GET(request: Request) {
       playbook,
       resumen,
       contactContext,
+      currentStageId,
+      stageOptions,
     }))
     .sort((a, b) => b.riskScore - a.riskScore);
 
