@@ -22,7 +22,6 @@ import {
   fetchOpportunities,
   fetchMessagesForContact,
   fetchPipelineStages,
-  fetchStageMap,
   fetchUsers,
   mapWithConcurrency,
 } from '@/lib/ghl-client';
@@ -277,12 +276,19 @@ export async function GET(request: Request) {
   // Usa el blueprint real del tenant (Won Track); si nunca corrió, cae a defaults.
   // En paralelo: mapa de etapas (id→nombre) y de usuarios (id→nombre) para
   // enriquecer cada oportunidad — GHL no persiste ni el nombre de etapa ni el dueño.
-  const [thresholds, stageMap, userMap, pipelineStages] = await Promise.all([
+  const [thresholds, userMap, pipelineStages] = await Promise.all([
     getTenantThresholds(orgId).then((t) => t ?? getDefaultThresholds()),
-    fetchStageMap(creds),
     fetchUsers(creds),
     fetchPipelineStages(creds),
   ]);
+  // `stageMap` (id→nombre) derivado del MISMO fetch de pipelines que alimenta
+  // el selector de "cambiar etapa": evita un segundo llamado idéntico a
+  // /opportunities/pipelines (que podía fallar por rate-limit y dejar el
+  // selector vacío) y garantiza que ambos vean exactamente las mismas etapas.
+  const stageMap: Record<string, string> = {};
+  for (const stages of Object.values(pipelineStages)) {
+    for (const s of stages) stageMap[s.id] = s.name;
+  }
 
   // Resuelve el nombre de la etapa (search/sync solo guardan el id).
   for (const { deal } of items) {
@@ -378,8 +384,12 @@ export async function GET(request: Request) {
       resumen: resumenForUi(deal, messages, analysis, playbook, lastActionByDeal.get(deal.id) ?? null),
       contactContext: contextByDeal.get(deal.id) ?? null,
       // Para el cambio manual de etapa: etapa actual + opciones del pipeline.
+      // Si el deal no trae pipelineId (o no matchea), caemos a las etapas del
+      // pipeline de ventas configurado del tenant.
       currentStageId: deal.pipelineStageId ?? null,
-      stageOptions: deal.pipelineId ? (pipelineStages[deal.pipelineId] ?? []) : [],
+      stageOptions:
+        (deal.pipelineId ? pipelineStages[deal.pipelineId] : undefined) ??
+        (row.ghlSalesPipelineId ? (pipelineStages[row.ghlSalesPipelineId] ?? []) : []),
     };
   });
 
