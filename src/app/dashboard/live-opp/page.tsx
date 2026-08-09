@@ -57,6 +57,8 @@ type Opportunity = {
   recommendedActions: string[];
   playbook?: Playbook;
   resumen?: Resumen;
+  currentStageId?: string | null;
+  stageOptions?: { id: string; name: string }[];
 };
 
 function formatDate(iso?: string): string {
@@ -134,6 +136,59 @@ export default function LiveOppPage() {
   const [actionResult, setActionResult] = useState<Record<string, { ok: boolean; msg: string }>>(
     {},
   );
+  // Acciones manuales (A1): texto libre, etapa destino, estado y resultado por opp.
+  const [manualText, setManualText] = useState<Record<string, string>>({});
+  const [manualStage, setManualStage] = useState<Record<string, string>>({});
+  const [manualBusy, setManualBusy] = useState<string | null>(null);
+  const [manualResult, setManualResult] = useState<Record<string, { ok: boolean; msg: string }>>(
+    {},
+  );
+
+  async function runManual(
+    opp: Opportunity,
+    kind: 'comentario_interno' | 'nota' | 'tarea' | 'cambiar_etapa',
+    extra: { mention?: boolean; targetStageId?: string; targetStageName?: string } = {},
+  ) {
+    if (manualBusy) return;
+    const key = `${opp.id}:${kind}`;
+    setManualBusy(key);
+    try {
+      const res = await fetch('/api/actions/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind,
+          dealId: opp.id,
+          contactId: opp.playbook?.contactId,
+          text: manualText[opp.id] ?? '',
+          assignedUserId: opp.playbook?.assignedUserId,
+          assignedUserName: opp.owner,
+          ...extra,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok || d.error) throw new Error(d.detail ? `${d.error} — ${d.detail}` : d.error);
+      const label: Record<string, string> = {
+        comentario_interno: extra.mention
+          ? 'Comentario interno enviado (ejecutivo notificado)'
+          : 'Comentario interno publicado',
+        nota: 'Nota agregada en GHL',
+        tarea: 'Tarea creada en GHL',
+        cambiar_etapa: `Etapa cambiada a «${extra.targetStageName ?? ''}»`,
+      };
+      setManualResult((prev) => ({ ...prev, [opp.id]: { ok: true, msg: label[kind] } }));
+      if (kind === 'comentario_interno' || kind === 'nota' || kind === 'tarea') {
+        setManualText((prev) => ({ ...prev, [opp.id]: '' }));
+      }
+    } catch (e) {
+      setManualResult((prev) => ({
+        ...prev,
+        [opp.id]: { ok: false, msg: e instanceof Error ? e.message : String(e) },
+      }));
+    } finally {
+      setManualBusy(null);
+    }
+  }
 
   async function executeAction(opp: Opportunity) {
     const pb = opp.playbook;
@@ -527,7 +582,10 @@ export default function LiveOppPage() {
                               </div>
                             )}
                             {opp.playbook && (
-                              <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
+                              <div className="mb-3 rounded-lg border-2 border-indigo-300 bg-indigo-50 p-3 shadow-sm ring-1 ring-indigo-200">
+                                <p className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-indigo-600">
+                                  ★ Acción recomendada
+                                </p>
                                 <div className="flex flex-wrap items-center gap-3">
                                   <span className="inline-flex items-center rounded-full bg-indigo-600 px-2.5 py-0.5 text-xs font-semibold text-white">
                                     {opp.playbook.label}
@@ -557,6 +615,116 @@ export default function LiveOppPage() {
                                 )}
                               </div>
                             )}
+                            {/* Acciones manuales: el usuario ejecuta cualquiera a demanda. */}
+                            <div className="mb-3 rounded-lg border border-zinc-200 bg-white p-3">
+                              <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                                Acciones manuales
+                              </p>
+                              <textarea
+                                value={manualText[opp.id] ?? ''}
+                                onChange={(e) =>
+                                  setManualText((p) => ({ ...p, [opp.id]: e.target.value }))
+                                }
+                                placeholder="Texto del comentario, nota o tarea…"
+                                rows={2}
+                                className="w-full resize-y rounded-md border border-zinc-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                              />
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    runManual(opp, 'comentario_interno', { mention: true });
+                                  }}
+                                  disabled={manualBusy !== null || !opp.playbook?.assignedUserId}
+                                  title={
+                                    opp.playbook?.assignedUserId
+                                      ? 'Comentario interno arrobando al ejecutivo'
+                                      : 'La oportunidad no tiene ejecutivo asignado'
+                                  }
+                                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                  {manualBusy === `${opp.id}:comentario_interno`
+                                    ? 'Enviando…'
+                                    : 'Comentario + avisar ejecutivo'}
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    runManual(opp, 'comentario_interno', { mention: false });
+                                  }}
+                                  disabled={manualBusy !== null}
+                                  className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                                >
+                                  Solo comentario
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    runManual(opp, 'nota');
+                                  }}
+                                  disabled={manualBusy !== null}
+                                  className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                                >
+                                  Dejar nota
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    runManual(opp, 'tarea');
+                                  }}
+                                  disabled={manualBusy !== null}
+                                  className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                                >
+                                  Crear tarea
+                                </button>
+                              </div>
+                              {opp.stageOptions && opp.stageOptions.length > 0 && (
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <span className="text-xs text-zinc-400">Etapa:</span>
+                                  <select
+                                    value={manualStage[opp.id] ?? opp.currentStageId ?? ''}
+                                    onChange={(e) =>
+                                      setManualStage((p) => ({ ...p, [opp.id]: e.target.value }))
+                                    }
+                                    className="rounded-md border border-zinc-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                  >
+                                    {opp.stageOptions.map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const stageId = manualStage[opp.id] ?? opp.currentStageId ?? '';
+                                      const st = opp.stageOptions?.find((s) => s.id === stageId);
+                                      if (!stageId || stageId === opp.currentStageId) return;
+                                      runManual(opp, 'cambiar_etapa', {
+                                        targetStageId: stageId,
+                                        targetStageName: st?.name,
+                                      });
+                                    }}
+                                    disabled={
+                                      manualBusy !== null ||
+                                      (manualStage[opp.id] ?? opp.currentStageId) === opp.currentStageId
+                                    }
+                                    className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                                  >
+                                    {manualBusy === `${opp.id}:cambiar_etapa`
+                                      ? 'Cambiando…'
+                                      : 'Cambiar etapa'}
+                                  </button>
+                                </div>
+                              )}
+                              {manualResult[opp.id] && (
+                                <p
+                                  className={`mt-2 text-xs ${manualResult[opp.id].ok ? 'text-green-700' : 'text-red-600'}`}
+                                >
+                                  {manualResult[opp.id].msg}
+                                </p>
+                              )}
+                            </div>
                             {opp.recommendedActions.length > 0 && (
                               <div className="space-y-1.5">
                                 <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">

@@ -466,6 +466,26 @@ export async function fetchPipelines({
 }
 
 /**
+ * Etapas ordenadas por pipeline: `pipelineId → [{id,name}]`. Alimenta el selector
+ * de "cambiar etapa" de las acciones manuales de Live Opp.
+ */
+export async function fetchPipelineStages({
+  token,
+  locationId,
+}: GhlCredentials): Promise<Record<string, Array<{ id: string; name: string }>>> {
+  const res = await ghlFetch(`/opportunities/pipelines?locationId=${locationId}`, token);
+  if (!res.ok) return {};
+  const data = (await res.json().catch(() => null)) as {
+    pipelines?: Array<{ id?: string; stages?: Array<{ id: string; name: string }> }>;
+  } | null;
+  const map: Record<string, Array<{ id: string; name: string }>> = {};
+  for (const p of data?.pipelines ?? []) {
+    if (p.id) map[p.id] = (p.stages ?? []).map((s) => ({ id: s.id, name: s.name }));
+  }
+  return map;
+}
+
+/**
  * Mapa `userId → nombre` de los usuarios de la location, para resolver el dueño
  * (assignedTo) de cada oportunidad. Un único llamado por request.
  */
