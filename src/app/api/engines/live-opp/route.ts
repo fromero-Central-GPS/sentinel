@@ -22,6 +22,7 @@ import {
   fetchOpportunities,
   fetchMessagesForContact,
   fetchPipelineStages,
+  fetchUserById,
   fetchUsers,
   mapWithConcurrency,
 } from '@/lib/ghl-client';
@@ -351,6 +352,23 @@ export async function GET(request: Request) {
     if (c.name && (!x.deal.contact.name || x.deal.contact.name === 'Desconocido')) {
       x.deal.contact.name = c.name;
     }
+  });
+
+  // El listado `/users/?locationId=` (fetchUsers) NO incluye a los usuarios
+  // tipo "account" (admins de agencia). Si el dueño asignado de alguna opp no
+  // quedó en `userMap`, lo resolvemos por id (`GET /users/{id}`, igual que el
+  // digest) para no mostrar la oportunidad como "sin dueño" cuando en GHL sí
+  // está asignada. Concurrencia acotada y solo para los ids faltantes.
+  const missingOwnerIds = Array.from(
+    new Set(
+      atRisk
+        .map((x) => x.deal.assignedTo)
+        .filter((id): id is string => typeof id === 'string' && !(id in userMap)),
+    ),
+  );
+  await mapWithConcurrency(missingOwnerIds, 5, async (id) => {
+    const u = await fetchUserById(creds, id).catch(() => null);
+    if (u) userMap[id] = u.name;
   });
 
   // Tercera capa: campos AI + notas del contacto (los que el agente irá
