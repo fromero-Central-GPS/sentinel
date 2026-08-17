@@ -34,10 +34,6 @@
     {
       "path": "/api/cron/digest",
       "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/radar",
-      "schedule": "30 */2 * * *"
     }
   ]
 }
