@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listGhlTenants, verifyCronAuth } from '@/lib/engine-runners';
-import { runRadarClassify, runRadarIngest } from '@/lib/radar-store';
+import { runRadarClassify, runRadarIngest, runRadarRefreshPending } from '@/lib/radar-store';
 
 /**
  * Cron del Radar: (1) ingesta — recorre las conversaciones de cada tenant y
@@ -21,8 +21,12 @@ export async function GET(request: Request) {
   const results = [];
   for (const { tenantId, creds } of tenants) {
     const ingest = await runRadarIngest(tenantId, creds);
+    // Refresca el estado liviano de los leads viejos que la paginación no re-tocó
+    // (sin leer / último mensaje) ANTES de clasificar, para que el LLM re-corra
+    // sobre el `lastMessageAt` fresco.
+    const refresh = await runRadarRefreshPending(tenantId, creds);
     const classify = await runRadarClassify(tenantId, creds);
-    results.push({ ingest, classify });
+    results.push({ ingest, refresh, classify });
   }
 
   return NextResponse.json({
