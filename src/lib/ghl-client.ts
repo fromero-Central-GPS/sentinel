@@ -251,18 +251,32 @@ export async function fetchOpportunitiesPage(
   };
 }
 
-/** Resuelve el conversationId de un contacto (GHL suele omitirlo en /opportunities). */
-export async function fetchConversationIdByContact(
+/**
+ * La conversación más reciente de un contacto, con su estado inline (unreadCount,
+ * último mensaje, dirección, fechas). Una sola llamada barata — NO trae la
+ * historia de mensajes. Base del refresh dirigido del Radar: refrescar el estado
+ * de un lead ya en la cola sin depender del barrido de paginación.
+ */
+export async function fetchConversationByContact(
   { token, locationId }: GhlCredentials,
   contactId: string,
-): Promise<string | null> {
+): Promise<RawConversation | null> {
   const res = await ghlFetch(
     `/conversations/search?locationId=${locationId}&contactId=${contactId}&limit=1`,
     token,
   );
   if (!res.ok) return null;
-  const data = (await res.json()) as { conversations?: Array<{ id: string }> };
-  return data.conversations?.[0]?.id ?? null;
+  const data = (await res.json()) as { conversations?: RawConversation[] };
+  return data.conversations?.[0] ?? null;
+}
+
+/** Resuelve el conversationId de un contacto (GHL suele omitirlo en /opportunities). */
+export async function fetchConversationIdByContact(
+  creds: GhlCredentials,
+  contactId: string,
+): Promise<string | null> {
+  const conv = await fetchConversationByContact(creds, contactId);
+  return conv?.id ?? null;
 }
 
 /** Trae los mensajes de una conversación (más recientes primero, normalizados). */

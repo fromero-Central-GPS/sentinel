@@ -9,6 +9,7 @@ import {
   getRadarLeads,
   runRadarClassify,
   runRadarIngest,
+  runRadarRefreshPending,
   setRadarStatus,
 } from '@/lib/radar-store';
 
@@ -84,11 +85,15 @@ export async function POST(request: Request) {
   if (action === 'refresh') {
     const result = await runRadarIngest(orgId, t.creds, { maxPages: 15, budgetMs: 40_000 });
     if (result.error) return NextResponse.json({ error: result.error }, { status: 502 });
+    // Refresca el estado liviano de los leads ya en la cola (sin leer / último
+    // mensaje), que el barrido de paginación no re-alcanza.
+    const refresh = await runRadarRefreshPending(orgId, t.creds);
     const classify = await runRadarClassify(orgId, t.creds, { batchSize: 10 });
     const [leads, crm] = await Promise.all([getRadarLeads(orgId), resolveCrmBase(orgId)]);
     return NextResponse.json({
       ok: true,
       result,
+      refresh,
       classify,
       leads,
       total: leads.length,

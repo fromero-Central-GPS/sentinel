@@ -8,12 +8,13 @@
  * tabla SEA la cola del Radar. Ver docs/radar-conversaciones-propuesta.md.
  */
 
-import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, notExists, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { deals, radarConversations } from '@/db/schema';
 import {
   addContactTags,
   fetchContactById,
+  fetchConversationByContact,
   fetchConversationsPage,
   fetchMessagesForContact,
   fetchUsersDetailed,
@@ -74,6 +75,34 @@ async function openContactIds(tenantId: string): Promise<Set<string>> {
     }
   }
   return set;
+}
+
+/**
+ * Predicado SQL: el contacto de la fila NO tiene una oportunidad ABIERTA ni
+ * GANADA en la BD (`deals`). Se evalúa EN VIVO contra `deals` en cada lectura,
+ * en vez de confiar en el flag `has_opportunity` que la ingesta congela al
+ * escribir la fila: la paginación de `conversations/search` no re-visita las
+ * conversaciones viejas (el nurture "bombea" las recientes), así que un lead que
+ * DESPUÉS obtuvo una oportunidad conservaba el flag viejo y seguía apareciendo
+ * (bug ago-2026: "conversaciones que ya tienen oportunidad creada").
+ *
+ * Excluye `open` (las cubre Live Opp) y `won` (ya es cliente, no un lead). Deja
+ * pasar contactos con solo `lost` (re-enganche) o sin deal — el valor del Radar;
+ * el clasificador LLM (`esCliente`) los desempata.
+ */
+function noOpenOrWonOpportunity() {
+  return notExists(
+    db
+      .select({ one: sql`1` })
+      .from(deals)
+      .where(
+        and(
+          eq(deals.tenantId, radarConversations.tenantId),
+          inArray(deals.status, ['open', 'won']),
+          sql`(${deals.payload}::jsonb ->> 'contactId') = ${radarConversations.contactId}`,
+        ),
+      ),
+  );
 }
 
 /** Ingesta del Radar para un tenant. */
@@ -214,6 +243,105 @@ export async function runRadarIngest(
   }
 }
 
+// ─── Refresh dirigido del estado de los leads pendientes ─────────────────────
+
+/** Concurrencia del refresh dirigido (1 llamada barata por lead). */
+const REFRESH_CONCURRENCY = 6;
+/** Tope de leads a refrescar por corrida (la cola es chica; cota de seguridad). */
+const DEFAULT_REFRESH_MAX = 200;
+
+export interface RadarRefreshResult {
+  tenantId: string;
+  checked: number; // leads consultados a GHL
+  refreshed: number; // leads con estado actualizado
+  gone: number; // conversaciones que GHL ya no devuelve (se dejan como están)
+  error?: string;
+}
+
+/**
+ * Refresca EN VIVO el estado LIVIANO (sin leer, último mensaje, inbound, señal de
+ * compra) de los leads pendientes de la cola, con una llamada dirigida por lead
+ * (`fetchConversationByContact`) — sin traer la historia ni recomputar el LLM.
+ *
+ * Resuelve el "Radar no actualiza nada": el barrido de paginación no re-visita
+ * las conversaciones viejas (el nurture bombea las recientes), así que un lead ya
+ * atendido seguía mostrando su "sin leer" viejo. NO recalcula el resumen comercial
+ * (`llmResumen`): ese snapshot solo lo recompone `runRadarClassify` cuando llegan
+ * mensajes nuevos (el `lastMessageAt` fresco de aquí es justo su gatillo). Tampoco
+ * auto-descarta: un lead atendido queda visible con su estado fresco y sale de la
+ * cola solo al descartar/convertir (decisión Francisco ago-2026).
+ */
+export async function runRadarRefreshPending(
+  tenantId: string,
+  creds: GhlCredentials,
+  opts?: { max?: number },
+): Promise<RadarRefreshResult> {
+  const max = opts?.max ?? DEFAULT_REFRESH_MAX;
+  try {
+    const rows = await db
+      .select({ id: radarConversations.id, contactId: radarConversations.contactId })
+      .from(radarConversations)
+      .where(
+        and(
+          eq(radarConversations.tenantId, tenantId),
+          eq(radarConversations.status, 'nuevo'),
+          isNotNull(radarConversations.contactId),
+        ),
+      )
+      .orderBy(desc(radarConversations.lastInboundAt))
+      .limit(max);
+
+    let checked = 0;
+    let refreshed = 0;
+    let gone = 0;
+
+    await mapWithConcurrency(rows, REFRESH_CONCURRENCY, async (row) => {
+      if (!row.contactId) return;
+      checked++;
+      const conv = await fetchConversationByContact(creds, row.contactId).catch(() => null);
+      if (!conv) {
+        gone++;
+        return; // GHL ya no la devuelve — dejamos la fila como está.
+      }
+      const lastMs = conv.lastMessageDate ?? 0;
+      const lastInbound =
+        conv.lastInboundWhatsappMessageDate ??
+        (conv.lastMessageDirection === 'inbound' ? conv.lastMessageDate : undefined);
+      // Señal de compra recomputada sobre el último mensaje fresco (mismo criterio
+      // que la ingesta: solo cuenta si el último mensaje es del cliente).
+      const cls = classifyBuyIntent(conv.lastMessageBody);
+      const buyIntent = conv.lastMessageDirection === 'inbound' && cls.buyIntent;
+      const unread = conv.unreadCount ?? 0;
+
+      await db
+        .update(radarConversations)
+        .set({
+          lastMessageSnippet: (conv.lastMessageBody ?? '').slice(0, 280) || null,
+          lastMessageDirection: conv.lastMessageDirection ?? null,
+          lastMessageAt: lastMs ? new Date(lastMs) : null,
+          // `lastInboundAt` solo avanza: sin inbound fresco, conserva el previo.
+          ...(lastInbound ? { lastInboundAt: new Date(lastInbound) } : {}),
+          unreadCount: String(unread),
+          buyIntent: buyIntent ? 'true' : 'false',
+          intentSignals: JSON.stringify(buyIntent ? cls.signals : []),
+          syncedAt: new Date(),
+        })
+        .where(eq(radarConversations.id, row.id));
+      refreshed++;
+    });
+
+    return { tenantId, checked, refreshed, gone };
+  } catch (err) {
+    return {
+      tenantId,
+      checked: 0,
+      refreshed: 0,
+      gone: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 // ─── Clasificación LLM del tenor + re-tag autónomo (R-2) ──────────────────
 
 /** Cuántas conversaciones clasifica el LLM por corrida (drena de a poco). */
@@ -263,7 +391,7 @@ export async function runRadarClassify(
         and(
           eq(radarConversations.tenantId, tenantId),
           eq(radarConversations.status, 'nuevo'),
-          eq(radarConversations.hasOpportunity, 'false'),
+          noOpenOrWonOpportunity(),
           or(
             isNull(radarConversations.llmClassifiedAt),
             lt(radarConversations.llmClassifiedAt, radarConversations.lastMessageAt),
@@ -412,8 +540,8 @@ export interface RadarLead {
 
 /**
  * Leads del Radar: conversaciones con intención de compra o cliente esperando,
- * SIN oportunidad abierta (lo que Live Opp no cubre) y aún sin gestionar.
- * Ordenadas por: intención de compra → sin leer → recencia.
+ * cuyo contacto NO tiene oportunidad abierta (la cubre Live Opp) ni ganada (ya
+ * es cliente), y aún sin gestionar. Ordenadas por: intención → sin leer → recencia.
  */
 export async function getRadarLeads(tenantId: string): Promise<RadarLead[]> {
   const rows = await db
@@ -422,8 +550,8 @@ export async function getRadarLeads(tenantId: string): Promise<RadarLead[]> {
     .where(
       and(
         eq(radarConversations.tenantId, tenantId),
-        eq(radarConversations.hasOpportunity, 'false'),
         eq(radarConversations.status, 'nuevo'),
+        noOpenOrWonOpportunity(),
       ),
     );
 
@@ -481,8 +609,8 @@ export async function getRadarLeadCount(tenantId: string): Promise<number> {
     .where(
       and(
         eq(radarConversations.tenantId, tenantId),
-        eq(radarConversations.hasOpportunity, 'false'),
         eq(radarConversations.status, 'nuevo'),
+        noOpenOrWonOpportunity(),
       ),
     );
   return row?.n ?? 0;
