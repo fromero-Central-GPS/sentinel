@@ -26,8 +26,13 @@ import {
 } from './ghl-client';
 import { toDeal, toMessages, type CanonicalMessage, type Deal } from './types';
 
-/** Estados que sincronizamos (el funnel completo que consumen los motores). */
-export const SYNC_STATUSES: OpportunityStatus[] = ['won', 'lost', 'open'];
+/**
+ * Estados que sincronizamos (el funnel completo que consumen los motores).
+ * `abandoned` se incluye para que el Radar pueda excluir a los contactos con una
+ * oportunidad abandonada (triada y dejada de lado a propósito): ningún otro motor
+ * la lee, pero sin sincronizarla el filtro del Radar no la vería.
+ */
+export const SYNC_STATUSES: OpportunityStatus[] = ['won', 'lost', 'open', 'abandoned'];
 
 /** Concurrencia para traer conversaciones (mismo criterio que los motores). */
 const MESSAGE_FETCH_CONCURRENCY = 5;

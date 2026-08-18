@@ -8,7 +8,7 @@
  * tabla SEA la cola del Radar. Ver docs/radar-conversaciones-propuesta.md.
  */
 
-import { and, desc, eq, inArray, isNotNull, isNull, lt, notExists, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, notExists, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { deals, radarConversations } from '@/db/schema';
 import {
@@ -78,19 +78,20 @@ async function openContactIds(tenantId: string): Promise<Set<string>> {
 }
 
 /**
- * Predicado SQL: el contacto de la fila NO tiene una oportunidad ABIERTA ni
- * GANADA en la BD (`deals`). Se evalúa EN VIVO contra `deals` en cada lectura,
- * en vez de confiar en el flag `has_opportunity` que la ingesta congela al
- * escribir la fila: la paginación de `conversations/search` no re-visita las
- * conversaciones viejas (el nurture "bombea" las recientes), así que un lead que
- * DESPUÉS obtuvo una oportunidad conservaba el flag viejo y seguía apareciendo
- * (bug ago-2026: "conversaciones que ya tienen oportunidad creada").
+ * Predicado SQL: el contacto de la fila NO tiene una oportunidad que lo saque del
+ * Radar en la BD (`deals`). Se evalúa EN VIVO contra `deals` en cada lectura, en
+ * vez de confiar en el flag `has_opportunity` que la ingesta congela al escribir
+ * la fila: la paginación de `conversations/search` no re-visita las conversaciones
+ * viejas (el nurture "bombea" las recientes), así que un lead que DESPUÉS obtuvo
+ * una oportunidad conservaba el flag viejo y seguía apareciendo (bug ago-2026:
+ * "conversaciones que ya tienen oportunidad creada").
  *
- * Excluye `open` (las cubre Live Opp) y `won` (ya es cliente, no un lead). Deja
- * pasar contactos con solo `lost` (re-enganche) o sin deal — el valor del Radar;
- * el clasificador LLM (`esCliente`) los desempata.
+ * Excluye `open` (las cubre Live Opp), `won` (ya es cliente) y `abandoned` (opp
+ * triada y dejada de lado a propósito — no querés que reaparezca como lead nuevo).
+ * Deja pasar contactos con solo `lost` (re-enganche: el cliente dijo que no) o sin
+ * deal — el valor del Radar; el clasificador LLM (`esCliente`) los desempata.
  */
-function noOpenOrWonOpportunity() {
+function noBlockingOpportunity() {
   return notExists(
     db
       .select({ one: sql`1` })
@@ -98,10 +99,24 @@ function noOpenOrWonOpportunity() {
       .where(
         and(
           eq(deals.tenantId, radarConversations.tenantId),
-          inArray(deals.status, ['open', 'won']),
+          inArray(deals.status, ['open', 'won', 'abandoned']),
           sql`(${deals.payload}::jsonb ->> 'contactId') = ${radarConversations.contactId}`,
         ),
       ),
+  );
+}
+
+/**
+ * Predicado SQL: el lead está VIVO — el cliente escribió su último inbound dentro
+ * de la ventana `INBOUND_LOOKBACK_DAYS`. El Radar es una cola de leads vivos: una
+ * conversación cuyo cliente no responde hace meses (aunque el nurture automático
+ * la "bombee") está fría y no debe mostrarse. `last_inbound_at` solo avanza con un
+ * inbound real, así que si el cliente vuelve a escribir, el lead reaparece solo.
+ */
+function isLiveLead() {
+  return gte(
+    radarConversations.lastInboundAt,
+    new Date(Date.now() - INBOUND_LOOKBACK_DAYS * 86_400_000),
   );
 }
 
@@ -391,7 +406,8 @@ export async function runRadarClassify(
         and(
           eq(radarConversations.tenantId, tenantId),
           eq(radarConversations.status, 'nuevo'),
-          noOpenOrWonOpportunity(),
+          noBlockingOpportunity(),
+          isLiveLead(),
           or(
             isNull(radarConversations.llmClassifiedAt),
             lt(radarConversations.llmClassifiedAt, radarConversations.lastMessageAt),
@@ -539,9 +555,10 @@ export interface RadarLead {
 }
 
 /**
- * Leads del Radar: conversaciones con intención de compra o cliente esperando,
- * cuyo contacto NO tiene oportunidad abierta (la cubre Live Opp) ni ganada (ya
- * es cliente), y aún sin gestionar. Ordenadas por: intención → sin leer → recencia.
+ * Leads del Radar: conversaciones VIVAS (cliente escribió hace poco) con intención
+ * de compra o cliente esperando, cuyo contacto no tiene oportunidad que lo saque
+ * del Radar (abierta/ganada/abandonada), y aún sin gestionar. Ordenadas por:
+ * intención → sin leer → recencia.
  */
 export async function getRadarLeads(tenantId: string): Promise<RadarLead[]> {
   const rows = await db
@@ -551,7 +568,8 @@ export async function getRadarLeads(tenantId: string): Promise<RadarLead[]> {
       and(
         eq(radarConversations.tenantId, tenantId),
         eq(radarConversations.status, 'nuevo'),
-        noOpenOrWonOpportunity(),
+        noBlockingOpportunity(),
+        isLiveLead(),
       ),
     );
 
@@ -610,7 +628,8 @@ export async function getRadarLeadCount(tenantId: string): Promise<number> {
       and(
         eq(radarConversations.tenantId, tenantId),
         eq(radarConversations.status, 'nuevo'),
-        noOpenOrWonOpportunity(),
+        noBlockingOpportunity(),
+        isLiveLead(),
       ),
     );
   return row?.n ?? 0;
