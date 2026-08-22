@@ -7,16 +7,12 @@
  * que no golpea la API de GHL (salvo el mapa de usuarios para nombre/teléfono).
  */
 
-import { and, eq, gte, inArray, or } from 'drizzle-orm';
-import { db } from '@/db';
-import { agentActions } from '@/db/schema';
 import type { GhlCredentials } from '@/lib/ghl-client';
 import { fetchUserById, mapWithConcurrency, type GhlUser } from '@/lib/ghl-client';
 import { getSyncedDeals } from '@/lib/deal-sync';
 import { getTenantThresholds } from '@/lib/won-track-store';
 import { analyzeLiveOpportunity, getDefaultThresholds } from '@/lib/live-opp-engine';
-import { decidePlaybookAction, ACTION_LABELS } from '@/lib/playbook-engine';
-import type { AgentAction } from '@/lib/taxonomy';
+import { decidePlaybookAction } from '@/lib/playbook-engine';
 import { getMetaCreds, sendWhatsAppDigest, type SendResult } from '@/lib/whatsapp';
 
 /** Cuántas oportunidades como máximo se listan por vendedor en el mensaje. */
@@ -24,12 +20,11 @@ const MAX_OPPS_PER_SELLER = 5;
 
 export interface DigestOpp {
   name: string;
+  /** Contacto para actuar: email o teléfono del contacto de la oportunidad. */
+  contact?: string;
   value: number;
   riskLevel: string;
   riskScore: number;
-  /** Acción tipificada del playbook (AG-1). */
-  action: AgentAction;
-  topAction: string;
 }
 
 export interface SellerDigest {
@@ -40,9 +35,6 @@ export interface SellerDigest {
   highCount: number;
   totalValueAtRisk: number;
   opps: DigestOpp[];
-  /** Actividad del agente sobre los deals del vendedor (AG-3). */
-  agentExecuted: number;
-  agentProposed: number;
   text: string;
 }
 
@@ -55,6 +47,10 @@ function composeText(d: Omit<SellerDigest, 'text'>): string {
   // (`sentinel_digest_diario`): "Hola 👋 Tu resumen Sentinel de hoy: {{1}} …".
   // Este texto es la variable {{1}}, así que arranca directo en el contenido
   // para no duplicar el saludo.
+  //
+  // El mensaje va al grano: solo el nombre de la oportunidad y el contacto
+  // (email o teléfono) para actuar. Sin recomendaciones ni bloques extra —
+  // en WhatsApp el espacio de más no se lee.
   const lines: string[] = [
     `${d.sellerName}, esto es lo que necesita tu atención hoy:`,
     `🔴 ${d.criticalCount} críticas · 🟠 ${d.highCount} en riesgo · $${fmtClp(d.totalValueAtRisk)} CLP en juego.`,
@@ -62,17 +58,9 @@ function composeText(d: Omit<SellerDigest, 'text'>): string {
   ];
   d.opps.forEach((o, i) => {
     const emoji = o.riskLevel === 'critical' ? '🔴' : o.riskLevel === 'high' ? '🟠' : '🟡';
-    lines.push(`${i + 1}. ${emoji} ${o.name} — $${fmtClp(o.value)}`);
-    lines.push(`   → ${o.topAction}`);
+    const contact = o.contact ? ` — ${o.contact}` : '';
+    lines.push(`${i + 1}. ${emoji} ${o.name}${contact}`);
   });
-  if (d.agentExecuted > 0 || d.agentProposed > 0) {
-    const parts: string[] = [];
-    if (d.agentExecuted > 0)
-      parts.push(`hizo ${d.agentExecuted} acción${d.agentExecuted === 1 ? '' : 'es'} por ti (últ. 24h)`);
-    if (d.agentProposed > 0)
-      parts.push(`${d.agentProposed} esperando tu OK en Sentinel`);
-    lines.push('', `🤖 Agente: ${parts.join(' · ')}.`);
-  }
   return lines.join('\n');
 }
 
@@ -114,58 +102,15 @@ export async function buildTenantDigests(
     if (decision.action === 'no_tocar') continue;
     const list = bySeller.get(deal.assignedTo) ?? [];
     list.push({
-      name: a.contactName || deal.name || a.opportunityId,
+      name: deal.name || a.contactName || a.opportunityId,
+      contact: deal.contact.email || deal.contact.phone,
       value: a.value,
       riskLevel: a.riskLevel,
       riskScore: a.overallRiskScore,
-      action: decision.action,
-      topAction:
-        decision.action === 'monitorear'
-          ? (a.recommendedActions[0] ?? 'Revisar la oportunidad.')
-          : `${ACTION_LABELS[decision.action]}: ${decision.rationale}`,
     });
     bySeller.set(deal.assignedTo, list);
   }
   if (bySeller.size === 0) return [];
-
-  // Actividad del agente (AG-3) sobre los deals de cada vendedor: ejecutado en
-  // las últimas 24h + propuestas pendientes. Una consulta por tenant.
-  const dealOwner = new Map<string, string>();
-  for (const { deal } of synced) {
-    if (deal.assignedTo && (!salesPipelineId || deal.pipelineId === salesPipelineId)) {
-      dealOwner.set(deal.id, deal.assignedTo);
-    }
-  }
-  const agentBySeller = new Map<string, { executed: number; proposed: number }>();
-  try {
-    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
-    const rows = await db
-      .select({
-        dealGhlId: agentActions.dealGhlId,
-        status: agentActions.status,
-      })
-      .from(agentActions)
-      .where(
-        and(
-          eq(agentActions.tenantId, tenantId),
-          or(
-            eq(agentActions.status, 'proposed'),
-            and(eq(agentActions.status, 'executed'), gte(agentActions.updatedAt, dayAgo)),
-          ),
-          inArray(agentActions.dealGhlId, [...dealOwner.keys()]),
-        ),
-      );
-    for (const r of rows) {
-      const seller = dealOwner.get(r.dealGhlId);
-      if (!seller) continue;
-      const acc = agentBySeller.get(seller) ?? { executed: 0, proposed: 0 };
-      if (r.status === 'executed') acc.executed++;
-      else acc.proposed++;
-      agentBySeller.set(seller, acc);
-    }
-  } catch {
-    // La actividad del agente es opcional en el digest: no rompas el envío.
-  }
 
   // Resuelve nombre + teléfono de cada vendedor asignado por su ID
   // (`GET /users/{id}`): el listado de la location devuelve el `phone` vacío, y
@@ -182,7 +127,6 @@ export async function buildTenantDigests(
   for (const [sellerId, opps] of bySeller) {
     opps.sort((a, b) => b.riskScore - a.riskScore);
     const user = userById.get(sellerId);
-    const agent = agentBySeller.get(sellerId) ?? { executed: 0, proposed: 0 };
     const base = {
       sellerId,
       sellerName: user?.name ?? 'vendedor',
@@ -191,8 +135,6 @@ export async function buildTenantDigests(
       highCount: opps.filter((o) => o.riskLevel === 'high').length,
       totalValueAtRisk: opps.reduce((s, o) => s + o.value, 0),
       opps: opps.slice(0, MAX_OPPS_PER_SELLER),
-      agentExecuted: agent.executed,
-      agentProposed: agent.proposed,
     };
     digests.push({ ...base, text: composeText(base) });
   }
