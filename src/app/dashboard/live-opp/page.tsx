@@ -129,6 +129,7 @@ export default function LiveOppPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'mock'>('live');
+  const [syncing, setSyncing] = useState(false);
   // Filtro por vendedor (nombre del dueño de la oportunidad). 'all' = todos.
   const [ownerFilter, setOwnerFilter] = useState<string>('all');
   // Estado de ejecución 1-click por oportunidad (AG-2).
@@ -238,12 +239,14 @@ export default function LiveOppPage() {
     }
   }
 
-  useEffect(() => {
+  function load(reset = true) {
     setLoading(true);
     setError(null);
-    setOwnerFilter('all');
-    setExpandedId(null);
-    fetch(`/api/engines/live-opp?mode=${mode}`)
+    if (reset) {
+      setOwnerFilter('all');
+      setExpandedId(null);
+    }
+    return fetch(`/api/engines/live-opp?mode=${mode}`)
       .then((r) => r.json())
       .then((d: LiveOppData) => {
         if (d.error) throw new Error(d.error);
@@ -251,7 +254,29 @@ export default function LiveOppPage() {
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  // "Actualizar": corre el sync completo + reconciliación on-demand (reemplaza al
+  // cron frecuente) y recarga el funnel. Solo tiene sentido en modo live.
+  async function sync() {
+    setSyncing(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/engines/live-opp', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error ?? 'Error al sincronizar con GHL');
+      await load(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   if (loading && !data) {
     return (
@@ -326,12 +351,23 @@ export default function LiveOppPage() {
             Oportunidades abiertas sin actividad — ordenadas por riesgo
           </p>
         </div>
-        <button
-          onClick={() => setMode(mode === 'live' ? 'mock' : 'live')}
-          className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 hover:bg-zinc-50"
-        >
-          Modo: {mode}
-        </button>
+        <div className="flex items-center gap-2">
+          {mode === 'live' && (
+            <button
+              onClick={sync}
+              disabled={syncing || loading}
+              className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {syncing ? 'Actualizando…' : 'Actualizar'}
+            </button>
+          )}
+          <button
+            onClick={() => setMode(mode === 'live' ? 'mock' : 'live')}
+            className="text-xs px-3 py-1.5 rounded-full border border-zinc-200 hover:bg-zinc-50"
+          >
+            Modo: {mode}
+          </button>
+        </div>
       </div>
 
       {/* Filtro por vendedor */}

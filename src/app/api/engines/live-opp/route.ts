@@ -29,8 +29,38 @@ import {
 import { assembleContactContext, type ContactContext } from '@/lib/contact-context';
 import { toDeal, toMessages } from '@/lib/types';
 import { getSyncedDeals } from '@/lib/deal-sync';
+import { runSyncForTenant } from '@/lib/engine-runners';
 import { DEFAULT_FIELD_MAP } from '@/lib/won-track-engine';
 import { getTenantThresholds } from '@/lib/won-track-store';
+
+// El sync completo + reconciliación puede tomar varios segundos (pagina todo el
+// funnel); dale el máximo de la función.
+export const maxDuration = 300;
+
+/**
+ * Actualización manual del funnel (acción "Actualizar" de Live Opp): corre el
+ * sync completo GHL → BD + reconciliación de borrados para ESTE tenant, on-demand.
+ * Reemplaza al cron frecuente — el usuario refresca cuando mira el tablero. La
+ * reconciliación (quita las opps borradas/fantasma en GHL, como las "ENCUESTA"
+ * eliminadas) SOLO ocurre acá y en el cron diario, nunca en el sync paginado de
+ * `/api/engines/sync`. Tras el POST, el cliente re-hace el GET para ver el funnel.
+ */
+export async function POST() {
+  const { orgId } = await auth();
+  if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const [row] = await db.select().from(appSettings).where(eq(appSettings.tenantId, orgId));
+  if (!row?.ghlApiToken || !row?.ghlLocationId) {
+    return NextResponse.json(
+      { error: 'GHL no configurado', hint: 'Ve a /settings y configura GHL.' },
+      { status: 400 },
+    );
+  }
+  const creds = { token: decrypt(row.ghlApiToken), locationId: row.ghlLocationId };
+  const result = await runSyncForTenant(orgId, creds);
+  if (result.error) return NextResponse.json({ error: result.error }, { status: 502 });
+  return NextResponse.json({ ok: true, sync: result });
+}
 
 /**
  * Decisión del playbook (AG-1/AG-2) en la forma que consume la UI: acción
