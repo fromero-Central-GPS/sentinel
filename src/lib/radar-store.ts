@@ -78,18 +78,19 @@ async function openContactIds(tenantId: string): Promise<Set<string>> {
 }
 
 /**
- * Predicado SQL: el contacto de la fila NO tiene una oportunidad que lo saque del
- * Radar en la BD (`deals`). Se evalúa EN VIVO contra `deals` en cada lectura, en
- * vez de confiar en el flag `has_opportunity` que la ingesta congela al escribir
- * la fila: la paginación de `conversations/search` no re-visita las conversaciones
- * viejas (el nurture "bombea" las recientes), así que un lead que DESPUÉS obtuvo
- * una oportunidad conservaba el flag viejo y seguía apareciendo (bug ago-2026:
+ * Predicado SQL: el contacto de la fila NO tiene NINGUNA oportunidad en la BD
+ * (`deals`). Se evalúa EN VIVO contra `deals` en cada lectura, en vez de confiar en
+ * el flag `has_opportunity` que la ingesta congela al escribir la fila: la
+ * paginación de `conversations/search` no re-visita las conversaciones viejas (el
+ * nurture "bombea" las recientes), así que un lead que DESPUÉS obtuvo una
+ * oportunidad conservaba el flag viejo y seguía apareciendo (bug ago-2026:
  * "conversaciones que ya tienen oportunidad creada").
  *
- * Excluye `open` (las cubre Live Opp), `won` (ya es cliente) y `abandoned` (opp
- * triada y dejada de lado a propósito — no querés que reaparezca como lead nuevo).
- * Deja pasar contactos con solo `lost` (re-enganche: el cliente dijo que no) o sin
- * deal — el valor del Radar; el clasificador LLM (`esCliente`) los desempata.
+ * El Radar es la cola de conversaciones SIN oportunidad: si el contacto ya tiene un
+ * deal en CUALQUIER estado — `open` (la cubre Live Opp), `won` (ya es cliente),
+ * `lost` (ya se cotizó y se perdió) o `abandoned` (triada y descartada) — no debe
+ * reaparecer como lead nuevo, aunque un email de email-marketing "reactive" el hilo
+ * (feedback Francisco ago-2026). Solo pasan los contactos SIN deal.
  */
 function noBlockingOpportunity() {
   return notExists(
@@ -99,7 +100,7 @@ function noBlockingOpportunity() {
       .where(
         and(
           eq(deals.tenantId, radarConversations.tenantId),
-          inArray(deals.status, ['open', 'won', 'abandoned']),
+          inArray(deals.status, ['open', 'won', 'lost', 'abandoned']),
           sql`(${deals.payload}::jsonb ->> 'contactId') = ${radarConversations.contactId}`,
         ),
       ),
@@ -556,8 +557,8 @@ export interface RadarLead {
 
 /**
  * Leads del Radar: conversaciones VIVAS (cliente escribió hace poco) con intención
- * de compra o cliente esperando, cuyo contacto no tiene oportunidad que lo saque
- * del Radar (abierta/ganada/abandonada), y aún sin gestionar. Ordenadas por:
+ * de compra o cliente esperando, cuyo contacto no tiene NINGUNA oportunidad
+ * (abierta/ganada/perdida/abandonada), y aún sin gestionar. Ordenadas por:
  * intención → sin leer → recencia.
  */
 export async function getRadarLeads(tenantId: string): Promise<RadarLead[]> {
